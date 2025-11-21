@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -13,19 +13,54 @@ import {
   ArrowRight,
   Bell
 } from 'lucide-react';
-import { studentData, getGreeting } from '../data/studentData';
-import { attendanceData } from '../data/attendanceData';
-import { getPendingAssignments, getUrgentAssignments } from '../data/assignmentsData';
-import { campusCoins, getRecentTransactions } from '../data/campusCoinsData';
-import { getCurrentClass } from '../data/timetableData';
-import { getRecentNotices } from '../data/noticesData';
+import { studentService } from '../services/studentService';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
+
+const getGreeting = (name) => {
+  const hour = new Date().getHours();
+  if (hour < 12) return `Good Morning, ${name}!`;
+  if (hour < 18) return `Good Afternoon, ${name}!`;
+  return `Good Evening, ${name}!`;
+};
 
 const Dashboard = () => {
-  const pendingAssignments = getPendingAssignments();
-  const urgentAssignments = getUrgentAssignments();
-  const recentTransactions = getRecentTransactions(3);
-  const currentClass = getCurrentClass();
-  const recentNotices = getRecentNotices(3);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getDashboard();
+      setDashboardData(data);
+    } catch (err) {
+      console.error('Dashboard error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading dashboard..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  if (!dashboardData) return null;
+
+  const {
+    student,
+    attendance,
+    pendingAssignments = [],
+    urgentAssignments = [],
+    wallet,
+    recentTransactions = [],
+    currentClass,
+    recentNotices = []
+  } = dashboardData;
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -71,7 +106,7 @@ const Dashboard = () => {
             transition={{ delay: 0.2 }}
             className="text-3xl lg:text-4xl font-bold mb-2"
           >
-            {getGreeting(studentData.name.split(' ')[0])}
+            {getGreeting(student.name?.split(' ')[0] || 'Student')}
           </motion.h1>
           <motion.p
             initial={{ x: -20, opacity: 0 }}
@@ -79,7 +114,7 @@ const Dashboard = () => {
             transition={{ delay: 0.3 }}
             className="text-blue-100 text-lg"
           >
-            Roll No: {studentData.rollNumber} | {studentData.department} | Semester {studentData.semester}
+            Roll No: {student.rollNumber || student.email} | {student.department?.name || 'N/A'} | Semester {student.semester || 'N/A'}
           </motion.p>
 
           {currentClass && (
@@ -103,20 +138,20 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Attendance Card */}
         <motion.div variants={itemVariants}>
-          <Link to="/attendance">
+          <Link to="/student/attendance">
             <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
               <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-lg ${attendanceData.overall >= 75 ? 'bg-green-100' : 'bg-red-100'}`}>
-                  <Calendar className={attendanceData.overall >= 75 ? 'text-green-600' : 'text-red-600'} size={24} />
+                <div className={`p-3 rounded-lg ${attendance?.overall >= 75 ? 'bg-green-100' : 'bg-red-100'}`}>
+                  <Calendar className={attendance?.overall >= 75 ? 'text-green-600' : 'text-red-600'} size={24} />
                 </div>
                 <ArrowRight className="text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" size={20} />
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">Attendance</h3>
-              <p className={`text-3xl font-bold ${attendanceData.overall >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-                {attendanceData.overall}%
+              <p className={`text-3xl font-bold ${attendance?.overall >= 75 ? 'text-green-600' : 'text-red-600'}`}>
+                {attendance?.overall || 0}%
               </p>
               <p className="text-xs text-gray-500 mt-2">
-                {attendanceData.overall >= 75 ? '✓ Above requirement' : '⚠ Below requirement'}
+                {attendance?.overall >= 75 ? '✓ Above requirement' : '⚠ Below requirement'}
               </p>
             </div>
           </Link>
@@ -124,7 +159,7 @@ const Dashboard = () => {
 
         {/* Pending Assignments */}
         <motion.div variants={itemVariants}>
-          <Link to="/assignments">
+          <Link to="/student/assignments">
             <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-purple-100 rounded-lg">
@@ -133,9 +168,9 @@ const Dashboard = () => {
                 <ArrowRight className="text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" size={20} />
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">Pending Assignments</h3>
-              <p className="text-3xl font-bold text-purple-600">{pendingAssignments.length}</p>
+              <p className="text-3xl font-bold text-purple-600">{pendingAssignments?.length || 0}</p>
               <p className="text-xs text-gray-500 mt-2">
-                {urgentAssignments.length} urgent
+                {urgentAssignments?.length || 0} urgent
               </p>
             </div>
           </Link>
@@ -143,7 +178,7 @@ const Dashboard = () => {
 
         {/* Campus Coins */}
         <motion.div variants={itemVariants}>
-          <Link to="/campus-coins">
+          <Link to="/student/campus-coins">
             <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-amber-100 rounded-lg">
@@ -152,7 +187,7 @@ const Dashboard = () => {
                 <ArrowRight className="text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" size={20} />
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">Campus Coins</h3>
-              <p className="text-3xl font-bold text-amber-600">₹{campusCoins.balance}</p>
+              <p className="text-3xl font-bold text-amber-600">₹{wallet?.balance || 0}</p>
               <p className="text-xs text-gray-500 mt-2">
                 Available balance
               </p>
@@ -162,7 +197,7 @@ const Dashboard = () => {
 
         {/* CGPA */}
         <motion.div variants={itemVariants}>
-          <Link to="/results">
+          <Link to="/student/results">
             <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow border border-gray-100 group">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-blue-100 rounded-lg">
@@ -171,9 +206,9 @@ const Dashboard = () => {
                 <ArrowRight className="text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" size={20} />
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">CGPA</h3>
-              <p className="text-3xl font-bold text-blue-600">{studentData.cgpa}</p>
+              <p className="text-3xl font-bold text-blue-600">{student.cgpa || 'N/A'}</p>
               <p className="text-xs text-gray-500 mt-2">
-                Current semester: {studentData.currentSemesterGPA}
+                Current semester: {student.currentSemesterGPA || 'N/A'}
               </p>
             </div>
           </Link>
@@ -190,16 +225,16 @@ const Dashboard = () => {
                   <BookOpen className="mr-2 text-purple-500" size={24} />
                   Pending Assignments
                 </h2>
-                <Link to="/assignments" className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center">
+                <Link to="/student/assignments" className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center">
                   View All
                   <ArrowRight size={16} className="ml-1" />
                 </Link>
               </div>
             </div>
             <div className="divide-y divide-gray-100">
-              {pendingAssignments.slice(0, 5).map((assignment, index) => {
+              {pendingAssignments?.slice(0, 5).map((assignment, index) => {
                 const dueDate = new Date(assignment.dueDate);
-                const isUrgent = urgentAssignments.includes(assignment);
+                const isUrgent = urgentAssignments?.some(a => a._id === assignment._id);
 
                 return (
                   <motion.div
@@ -218,11 +253,11 @@ const Dashboard = () => {
                             </span>
                           )}
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
-                            {assignment.subjectCode}
+                            {assignment.subject?.code || assignment.subjectCode}
                           </span>
                         </div>
                         <h3 className="font-semibold text-gray-900 mb-1">{assignment.title}</h3>
-                        <p className="text-sm text-gray-600">Subject: {assignment.subject}</p>
+                        <p className="text-sm text-gray-600">Subject: {assignment.subject?.name || assignment.subject}</p>
                       </div>
                       <div className="text-right ml-4">
                         <p className="text-sm font-medium text-gray-900">
@@ -236,7 +271,7 @@ const Dashboard = () => {
                   </motion.div>
                 );
               })}
-              {pendingAssignments.length === 0 && (
+              {(!pendingAssignments || pendingAssignments.length === 0) && (
                 <div className="p-8 text-center">
                   <CheckCircle className="mx-auto text-green-500 mb-2" size={48} />
                   <p className="text-gray-500">All assignments completed!</p>
@@ -257,7 +292,7 @@ const Dashboard = () => {
               </h2>
             </div>
             <div className="divide-y divide-gray-100">
-              {recentTransactions.map((transaction, index) => (
+              {recentTransactions?.map((transaction, index) => (
                 <motion.div
                   key={transaction.id}
                   initial={{ opacity: 0, x: 20 }}
@@ -291,13 +326,13 @@ const Dashboard = () => {
                   <Bell className="mr-2 text-red-500" size={20} />
                   Recent Notices
                 </h2>
-                <Link to="/notices" className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                <Link to="/student/notices" className="text-blue-600 hover:text-blue-700 text-sm font-medium">
                   View All
                 </Link>
               </div>
             </div>
             <div className="divide-y divide-gray-100">
-              {recentNotices.map((notice, index) => (
+              {recentNotices?.map((notice, index) => (
                 <motion.div
                   key={notice.id}
                   initial={{ opacity: 0 }}
