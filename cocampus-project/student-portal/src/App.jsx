@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastProvider } from './components/Toast';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Student Portal
 import Layout from './components/Layout';
@@ -116,16 +118,17 @@ import Login from './pages/Login';
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Root redirects to login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+    <ToastProvider>
+      <Router>
+        <Routes>
+          {/* Root redirects to login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Login Route */}
-        <Route path="/login" element={<Login />} />
+          {/* Login Route */}
+          <Route path="/login" element={<Login />} />
 
-        {/* Student Portal */}
-        <Route path="/student" element={<Layout />}>
+          {/* Student Portal */}
+          <Route path="/student" element={<ProtectedRoute allowedRoles={['student']}><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/student/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="assignments" element={<Assignments />} />
@@ -147,7 +150,7 @@ function App() {
         </Route>
 
         {/* Faculty Portal */}
-        <Route path="/faculty" element={<FacultyLayout />}>
+        <Route path="/faculty" element={<ProtectedRoute allowedRoles={['faculty']}><FacultyLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/faculty/dashboard" replace />} />
           <Route path="dashboard" element={<FacultyDashboard />} />
           <Route path="attendance" element={<AttendanceManagement />} />
@@ -161,7 +164,7 @@ function App() {
         </Route>
 
         {/* HoD Portal */}
-        <Route path="/hod" element={<HoDLayout />}>
+        <Route path="/hod" element={<ProtectedRoute allowedRoles={['hod']}><HoDLayout /></ProtectedRoute>}>
           <Route index element={<HoDDashboard />} />
           <Route path="faculty-management" element={<FacultyManagement />} />
           <Route path="add-faculty" element={<AddFaculty />} />
@@ -174,7 +177,7 @@ function App() {
         </Route>
 
         {/* Principal Portal */}
-        <Route path="/principal" element={<PrincipalLayout />}>
+        <Route path="/principal" element={<ProtectedRoute allowedRoles={['principal']}><PrincipalLayout /></ProtectedRoute>}>
           <Route index element={<PrincipalDashboard />} />
           <Route path="departments" element={<DepartmentManagement />} />
           <Route path="leave-management" element={<PrincipalLeaveManagement />} />
@@ -186,7 +189,7 @@ function App() {
         </Route>
 
         {/* Club Portal */}
-        <Route path="/club" element={<ClubLayout />}>
+        <Route path="/club" element={<ProtectedRoute allowedRoles={['club']}><ClubLayout /></ProtectedRoute>}>
           <Route index element={<ClubDashboard />} />
           <Route path="events" element={<EventManagement />} />
           <Route path="members" element={<MemberManagement />} />
@@ -196,7 +199,7 @@ function App() {
         </Route>
 
         {/* Hostel Portal */}
-        <Route path="/hostel" element={<HostelLayout />}>
+        <Route path="/hostel" element={<ProtectedRoute allowedRoles={['warden']}><HostelLayout /></ProtectedRoute>}>
           <Route index element={<HostelDashboard />} />
           <Route path="gate-pass" element={<HostelGatePassManagement />} />
           <Route path="mess" element={<HostelMessMenu />} />
@@ -204,7 +207,7 @@ function App() {
         </Route>
 
         {/* Canteen Portal */}
-        <Route path="/canteen" element={<CanteenLayout />}>
+        <Route path="/canteen" element={<ProtectedRoute allowedRoles={['canteen']}><CanteenLayout /></ProtectedRoute>}>
           <Route index element={<CanteenDashboard />} />
           <Route path="stalls" element={<CanteenStallManagement />} />
           <Route path="orders" element={<OrderOverview />} />
@@ -213,7 +216,7 @@ function App() {
         </Route>
 
         {/* Stall Portal */}
-        <Route path="/stall" element={<StallLayout />}>
+        <Route path="/stall" element={<ProtectedRoute allowedRoles={['stall']}><StallLayout /></ProtectedRoute>}>
           <Route index element={<StallDashboard />} />
           <Route path="products" element={<ProductManagement />} />
           <Route path="orders" element={<StallOrderManagement />} />
@@ -221,7 +224,7 @@ function App() {
         </Route>
 
         {/* Sports Portal */}
-        <Route path="/sports" element={<SportsLayout />}>
+        <Route path="/sports" element={<ProtectedRoute allowedRoles={['sports']}><SportsLayout /></ProtectedRoute>}>
           <Route index element={<SportsDashboard />} />
           <Route path="facilities" element={<Facilities />} />
           <Route path="book" element={<BookFacility />} />
@@ -230,7 +233,7 @@ function App() {
         </Route>
 
         {/* Admin Portal */}
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminLayout /></ProtectedRoute>}>
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="departments" element={<AdminDepartmentManagement />} />
@@ -247,6 +250,7 @@ function App() {
         </Route>
       </Routes>
     </Router>
+    </ToastProvider>
   );
 }
 
