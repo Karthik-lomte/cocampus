@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Clock, CheckCircle, XCircle, AlertCircle, Heart, Users, Briefcase, UserCheck, Home } from 'lucide-react';
-import { gatePassData } from '../data/gatePassData';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function GatePass() {
+  const toast = useToast();
+  const [gatePassData, setGatePassData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     passType: '',
     sendTo: '',
@@ -16,22 +24,68 @@ function GatePass() {
     supportingDocs: null
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const approverText = formData.sendTo === 'hod' ? 'Head of Department' : 'Hostel Warden';
-    alert(`Gate pass request submitted successfully!\nYour request has been sent to: ${approverText}`);
-    setShowRequestForm(false);
-    setFormData({
-      passType: '',
-      sendTo: '',
-      reason: '',
-      date: '',
-      outTime: '',
-      expectedReturn: '',
-      parentContact: '',
-      supportingDocs: null
-    });
+  useEffect(() => {
+    loadGatePasses();
+  }, []);
+
+  const loadGatePasses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getGatePasses();
+      setGatePassData(data);
+    } catch (err) {
+      console.error('Gate pass error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSubmitting(true);
+      const submitData = new FormData();
+      Object.keys(formData).forEach(key => {
+        if (formData[key]) submitData.append(key, formData[key]);
+      });
+
+      await studentService.createGatePass(submitData);
+      const approverText = formData.sendTo === 'hod' ? 'Head of Department' : 'Hostel Warden';
+      toast.success(`Gate pass request submitted successfully! Your request has been sent to: ${approverText}`);
+
+      setShowRequestForm(false);
+      setFormData({
+        passType: '',
+        sendTo: '',
+        reason: '',
+        date: '',
+        outTime: '',
+        expectedReturn: '',
+        parentContact: '',
+        supportingDocs: null
+      });
+
+      await loadGatePasses();
+    } catch (err) {
+      console.error('Submit error:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit gate pass request');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading gate passes..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadGatePasses} fullScreen />;
+
+  const passTypes = [
+    { value: 'medical', label: 'Medical Emergency', icon: 'Heart' },
+    { value: 'family', label: 'Family Function', icon: 'Users' },
+    { value: 'personal', label: 'Personal Work', icon: 'Briefcase' },
+    { value: 'other', label: 'Other', icon: 'Clock' }
+  ];
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -111,7 +165,7 @@ function GatePass() {
                 Reason for Leave *
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {gatePassData.passTypes.map((type) => (
+                {passTypes.map((type) => (
                   <label
                     key={type.value}
                     className="flex items-start gap-3 p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
@@ -279,15 +333,24 @@ function GatePass() {
               <button
                 type="button"
                 onClick={() => setShowRequestForm(false)}
+                disabled={submitting}
                 className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                disabled={submitting}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center"
               >
-                Submit Request
+                {submitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Request'
+                )}
               </button>
             </div>
           </form>
@@ -319,10 +382,10 @@ function GatePass() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {gatePassData.requestHistory.map((request) => (
-                <tr key={request.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">#{request.id.toString().padStart(3, '0')}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{request.passType}</td>
+              {gatePassData?.requestHistory?.map((request) => (
+                <tr key={request._id || request.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-900">#{(request.id || request._id).toString().slice(-3)}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 capitalize">{request.passType}</td>
                   <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{request.reason}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     <div>{new Date(request.date).toLocaleDateString()}</div>
@@ -346,17 +409,17 @@ function GatePass() {
 
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-gray-200">
-          {gatePassData.requestHistory.map((request) => (
+          {gatePassData?.requestHistory?.map((request) => (
             <motion.div
-              key={request.id}
+              key={request._id || request.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="p-4"
             >
               <div className="flex justify-between items-start mb-3">
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">Request #{request.id.toString().padStart(3, '0')}</div>
-                  <div className="font-semibold text-gray-900">{request.passType}</div>
+                  <div className="text-xs text-gray-500 mb-1">Request #{(request.id || request._id).toString().slice(-3)}</div>
+                  <div className="font-semibold text-gray-900 capitalize">{request.passType}</div>
                 </div>
                 {getStatusBadge(request.status)}
               </div>
