@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Lock, GraduationCap, Briefcase, Eye, EyeOff, Crown, Award, Users, Home, ChefHat, Coffee, Dumbbell, Mail, Phone, MapPin, Shield } from 'lucide-react';
+import { authService } from '../services/authService';
+import { useToast } from '../components/Toast';
 
 function Login() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [selectedRole, setSelectedRole] = useState('student');
   const [formData, setFormData] = useState({
     username: '',
@@ -97,46 +100,81 @@ function Login() {
     }
   ];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (selectedRole === 'student') {
-        navigate('/student/dashboard');
-      } else if (selectedRole === 'faculty') {
-        navigate('/faculty/dashboard');
-      } else if (selectedRole === 'hod') {
-        navigate('/hod');
-      } else if (selectedRole === 'principal') {
-        navigate('/principal');
-      } else if (selectedRole === 'club') {
-        navigate('/club');
-      } else if (selectedRole === 'hostel') {
-        navigate('/hostel');
-      } else if (selectedRole === 'canteen') {
-        navigate('/canteen');
-      } else if (selectedRole === 'stall') {
-        navigate('/stall');
-      } else if (selectedRole === 'sports') {
-        navigate('/sports');
-      } else if (selectedRole === 'admin') {
-        navigate('/admin');
+    try {
+      // Prepare credentials based on role
+      let email = formData.username;
+
+      // For roles that don't use email, we need to convert the username to email format
+      // This is a temporary solution - backend should support username/ID login
+      if (selectedRole !== 'sports' && !formData.username.includes('@')) {
+        // For now, use a format like: username@role.cocampus.edu
+        email = `${formData.username}@${selectedRole}.cocampus.edu`;
       }
+
+      const { user } = await authService.login({
+        email,
+        password: formData.password
+      });
+
+      // Verify user role matches selected role
+      if (user.role !== selectedRole) {
+        toast.error(`Invalid credentials for ${selectedRole} role`);
+        await authService.logout();
+        return;
+      }
+
+      toast.success(`Welcome back, ${user.name || user.email}!`);
+
+      // Navigate to appropriate dashboard based on role
+      const roleRoutes = {
+        student: '/student/dashboard',
+        faculty: '/faculty/dashboard',
+        hod: '/hod',
+        principal: '/principal',
+        club: '/club',
+        warden: '/hostel',
+        canteen: '/canteen',
+        stall: '/stall',
+        sports: '/sports',
+        admin: '/admin'
+      };
+
+      navigate(roleRoutes[user.role] || '/login');
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error(error.response?.data?.message || 'Login failed. Please check your credentials.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
     if (signupData.password !== signupData.confirmPassword) {
-      alert('Passwords do not match!');
+      toast.error('Passwords do not match!');
       return;
     }
     setIsLoading(true);
 
-    setTimeout(() => {
-      alert('Registration successful! Please wait for admin approval. You will receive an email once approved.');
+    try {
+      await authService.register({
+        name: signupData.name,
+        email: signupData.email,
+        phone: signupData.phone,
+        address: signupData.address,
+        idProof: {
+          type: signupData.idProofType,
+          number: signupData.idProofNumber
+        },
+        password: signupData.password,
+        role: 'sports'
+      });
+
+      toast.success('Registration successful! Please wait for admin approval.');
       setIsSignupMode(false);
       setSignupData({
         name: '',
@@ -148,8 +186,12 @@ function Login() {
         password: '',
         confirmPassword: ''
       });
+    } catch (error) {
+      console.error('Signup error:', error);
+      toast.error(error.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const getInputLabel = () => {
