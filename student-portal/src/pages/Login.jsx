@@ -2,14 +2,17 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Lock, GraduationCap, Briefcase, Eye, EyeOff, Crown, Award, Users, Home, ChefHat, Coffee, Dumbbell, Mail, Phone, MapPin, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [selectedRole, setSelectedRole] = useState('student');
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   });
+  const [error, setError] = useState('');
   const [signupData, setSignupData] = useState({
     name: '',
     email: '',
@@ -97,34 +100,55 @@ function Login() {
     }
   ];
 
-  const handleSubmit = (e) => {
+  // Map frontend roles to backend roles
+  const roleMapping = {
+    'student': 'student',
+    'faculty': 'faculty',
+    'hod': 'hod',
+    'principal': 'principal',
+    'club': 'club_admin',
+    'hostel': 'warden',
+    'canteen': 'canteen_manager',
+    'stall': 'stall_owner',
+    'sports': 'guest',
+    'admin': 'admin'
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (selectedRole === 'student') {
-        navigate('/student/dashboard');
-      } else if (selectedRole === 'faculty') {
-        navigate('/faculty/dashboard');
-      } else if (selectedRole === 'hod') {
-        navigate('/hod');
-      } else if (selectedRole === 'principal') {
-        navigate('/principal');
-      } else if (selectedRole === 'club') {
-        navigate('/club');
-      } else if (selectedRole === 'hostel') {
-        navigate('/hostel');
-      } else if (selectedRole === 'canteen') {
-        navigate('/canteen');
-      } else if (selectedRole === 'stall') {
-        navigate('/stall');
-      } else if (selectedRole === 'sports') {
-        navigate('/sports');
-      } else if (selectedRole === 'admin') {
-        navigate('/admin');
+    try {
+      // Get backend role
+      const backendRole = roleMapping[selectedRole];
+
+      // Call login API
+      const result = await login(formData.username, formData.password, backendRole);
+
+      if (result.success) {
+        // Navigate based on frontend role
+        const routes = {
+          'student': '/student/dashboard',
+          'faculty': '/faculty/dashboard',
+          'hod': '/hod',
+          'principal': '/principal',
+          'club': '/club',
+          'hostel': '/hostel',
+          'canteen': '/canteen',
+          'stall': '/stall',
+          'sports': '/sports',
+          'admin': '/admin'
+        };
+        navigate(routes[selectedRole] || '/');
+      } else {
+        setError(result.message || 'Invalid credentials');
       }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleSignup = (e) => {
@@ -302,6 +326,17 @@ function Login() {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+            >
+              {error}
+            </motion.div>
           )}
 
           {/* Login Form */}
