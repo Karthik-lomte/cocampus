@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -15,28 +15,17 @@ import {
   Hash,
   Star
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const SubjectManagement = () => {
-  const [subjects, setSubjects] = useState([
-    { id: 1, code: 'CS101', name: 'Introduction to Programming', credits: 4, type: 'Theory', department: 'Computer Science', semester: 1 },
-    { id: 2, code: 'CS102', name: 'Data Structures', credits: 4, type: 'Theory', department: 'Computer Science', semester: 2 },
-    { id: 3, code: 'CS103L', name: 'Programming Lab', credits: 2, type: 'Lab', department: 'Computer Science', semester: 1 },
-    { id: 4, code: 'CS201', name: 'Database Management Systems', credits: 4, type: 'Theory', department: 'Computer Science', semester: 3 },
-    { id: 5, code: 'CS202L', name: 'DBMS Lab', credits: 2, type: 'Lab', department: 'Computer Science', semester: 3 },
-    { id: 6, code: 'CS301E', name: 'Machine Learning', credits: 3, type: 'Elective', department: 'Computer Science', semester: 5 },
-    { id: 7, code: 'EC101', name: 'Basic Electronics', credits: 4, type: 'Theory', department: 'Electronics', semester: 1 },
-    { id: 8, code: 'EC102L', name: 'Electronics Lab', credits: 2, type: 'Lab', department: 'Electronics', semester: 1 },
-    { id: 9, code: 'EC201', name: 'Digital Signal Processing', credits: 4, type: 'Theory', department: 'Electronics', semester: 4 },
-    { id: 10, code: 'EC301E', name: 'VLSI Design', credits: 3, type: 'Elective', department: 'Electronics', semester: 6 },
-    { id: 11, code: 'ME101', name: 'Engineering Mechanics', credits: 4, type: 'Theory', department: 'Mechanical', semester: 1 },
-    { id: 12, code: 'ME102L', name: 'Workshop Practice', credits: 2, type: 'Lab', department: 'Mechanical', semester: 1 },
-    { id: 13, code: 'ME201', name: 'Thermodynamics', credits: 4, type: 'Theory', department: 'Mechanical', semester: 3 },
-    { id: 14, code: 'CE101', name: 'Surveying', credits: 4, type: 'Theory', department: 'Civil', semester: 2 },
-    { id: 15, code: 'CE201E', name: 'Environmental Engineering', credits: 3, type: 'Elective', department: 'Civil', semester: 5 },
-    { id: 16, code: 'IT101', name: 'Web Technologies', credits: 4, type: 'Theory', department: 'Information Technology', semester: 3 },
-    { id: 17, code: 'IT102L', name: 'Web Development Lab', credits: 2, type: 'Lab', department: 'Information Technology', semester: 3 },
-    { id: 18, code: 'MATH101', name: 'Engineering Mathematics I', credits: 4, type: 'Theory', department: 'Mathematics', semester: 1 }
-  ]);
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [subjects, setSubjects] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -51,6 +40,27 @@ const SubjectManagement = () => {
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology', 'Mathematics', 'Physics', 'Chemistry'];
   const subjectTypes = ['Theory', 'Lab', 'Elective'];
 
+  useEffect(() => {
+    loadSubjects();
+  }, [departmentFilter, typeFilter]);
+
+  const loadSubjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = {};
+      if (departmentFilter !== 'all') params.department = departmentFilter;
+      if (typeFilter !== 'all') params.type = typeFilter;
+      const data = await adminService.getSubjects(params);
+      setSubjects(data.subjects || data || []);
+    } catch (err) {
+      console.error('Subjects error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const theoryCount = subjects.filter(s => s.type === 'Theory').length;
   const labCount = subjects.filter(s => s.type === 'Lab').length;
   const electiveCount = subjects.filter(s => s.type === 'Elective').length;
@@ -63,47 +73,66 @@ const SubjectManagement = () => {
     return matchesSearch && matchesDepartment && matchesType;
   });
 
-  const handleAddSubject = (e) => {
+  const handleAddSubject = async (e) => {
     e.preventDefault();
-    const newSubject = {
-      id: subjects.length + 1,
-      code: formData.code,
-      name: formData.name,
-      credits: parseInt(formData.credits),
-      type: formData.type,
-      department: formData.department,
-      semester: parseInt(formData.semester)
-    };
-    setSubjects([...subjects, newSubject]);
-    setShowAddModal(false);
-    setFormData({ code: '', name: '', credits: '', type: '', department: '', semester: '' });
-    alert('Subject added successfully!');
+    try {
+      setSubmitting(true);
+      const subjectData = {
+        code: formData.code,
+        name: formData.name,
+        credits: parseInt(formData.credits),
+        type: formData.type,
+        department: formData.department,
+        semester: parseInt(formData.semester)
+      };
+      await adminService.createSubject(subjectData);
+      toast.success('Subject added successfully!');
+      await loadSubjects();
+      setShowAddModal(false);
+      setFormData({ code: '', name: '', credits: '', type: '', department: '', semester: '' });
+    } catch (err) {
+      console.error('Add subject error:', err);
+      toast.error(err.response?.data?.message || 'Failed to add subject');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditSubject = (e) => {
+  const handleEditSubject = async (e) => {
     e.preventDefault();
-    setSubjects(subjects.map(subject =>
-      subject.id === selectedSubject.id
-        ? {
-            ...subject,
-            code: formData.code,
-            name: formData.name,
-            credits: parseInt(formData.credits),
-            type: formData.type,
-            department: formData.department,
-            semester: parseInt(formData.semester)
-          }
-        : subject
-    ));
-    setShowEditModal(false);
-    setSelectedSubject(null);
-    alert('Subject updated successfully!');
+    try {
+      setSubmitting(true);
+      const subjectData = {
+        code: formData.code,
+        name: formData.name,
+        credits: parseInt(formData.credits),
+        type: formData.type,
+        department: formData.department,
+        semester: parseInt(formData.semester)
+      };
+      await adminService.updateSubject(selectedSubject.id, subjectData);
+      toast.success('Subject updated successfully!');
+      await loadSubjects();
+      setShowEditModal(false);
+      setSelectedSubject(null);
+    } catch (err) {
+      console.error('Update subject error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update subject');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteSubject = (subjectId) => {
+  const handleDeleteSubject = async (subjectId) => {
     if (window.confirm('Are you sure you want to delete this subject?')) {
-      setSubjects(subjects.filter(s => s.id !== subjectId));
-      alert('Subject deleted successfully!');
+      try {
+        await adminService.deleteSubject(subjectId);
+        toast.success('Subject deleted successfully!');
+        await loadSubjects();
+      } catch (err) {
+        console.error('Delete subject error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete subject');
+      }
     }
   };
 
@@ -137,6 +166,9 @@ const SubjectManagement = () => {
       default: return 'gray';
     }
   };
+
+  if (loading) return <Loading fullScreen message="Loading subject management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadSubjects} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -467,15 +499,17 @@ const SubjectManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Subject
+                    {submitting ? 'Adding...' : 'Add Subject'}
                   </button>
                 </div>
               </form>
@@ -587,15 +621,17 @@ const SubjectManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
