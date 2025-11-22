@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -13,40 +14,54 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import adminService from '../api/adminService';
 
 const AdminDashboard = () => {
-  const stats = {
-    totalStudents: 4250,
-    totalFaculty: 185,
-    departments: 8,
-    feeCollected: 2.8,
-    pendingApprovals: 15,
-    activeEvents: 6
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalFaculty: 0,
+    departments: 0,
+    feeCollected: 0,
+    pendingApprovals: 0,
+    activeEvents: 0
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [pendingTasks, setPendingTasks] = useState([]);
+  const [departmentStats, setDepartmentStats] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const response = await adminService.getDashboardStats();
+
+      if (response.success) {
+        setStats(response.data.stats);
+        setRecentActivities(response.data.recentActivities || []);
+        setPendingTasks(response.data.pendingTasks || []);
+        setDepartmentStats(response.data.departmentStats || []);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentActivities = [
-    { id: 1, type: 'user', message: 'New faculty added: Dr. Rajesh Kumar', time: '10 minutes ago', status: 'success' },
-    { id: 2, type: 'approval', message: 'Principal leave request pending', time: '30 minutes ago', status: 'warning' },
-    { id: 3, type: 'fee', message: 'Fee structure updated for 2024-25', time: '1 hour ago', status: 'success' },
-    { id: 4, type: 'notice', message: 'New notice published: Exam Schedule', time: '2 hours ago', status: 'info' },
-    { id: 5, type: 'booking', message: '3 sports booking requests pending', time: '3 hours ago', status: 'warning' }
-  ];
-
-  const pendingTasks = [
-    { id: 1, task: 'Approve Principal leave request', priority: 'high', link: '/admin/approvals' },
-    { id: 2, task: 'Process 5 certificate requests', priority: 'medium', link: '/admin/approvals' },
-    { id: 3, task: 'Review sports booking requests', priority: 'medium', link: '/admin/approvals' },
-    { id: 4, task: 'Upload semester marks for CSE', priority: 'high', link: '/admin/academic' },
-    { id: 5, task: 'Update fee structure for new semester', priority: 'low', link: '/admin/fees' }
-  ];
-
-  const departmentStats = [
-    { name: 'Computer Science', students: 850, faculty: 45, performance: 88 },
-    { name: 'Electronics', students: 620, faculty: 32, performance: 85 },
-    { name: 'Mechanical', students: 580, faculty: 30, performance: 82 },
-    { name: 'Civil', students: 450, faculty: 25, performance: 80 },
-    { name: 'Information Tech', students: 520, faculty: 28, performance: 86 }
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
