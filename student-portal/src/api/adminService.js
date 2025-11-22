@@ -313,6 +313,134 @@ export const getHostelStats = async () => {
   return response.data;
 };
 
+// Academic - Semesters
+export const getSemesters = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/academic/semesters?${params}`);
+  return response.data;
+};
+
+export const getSemester = async (id) => {
+  const response = await apiClient.get(`/academic/semesters/${id}`);
+  return response.data;
+};
+
+export const createSemester = async (semesterData) => {
+  const response = await apiClient.post('/academic/semesters', semesterData);
+  return response.data;
+};
+
+export const updateSemester = async (id, semesterData) => {
+  const response = await apiClient.put(`/academic/semesters/${id}`, semesterData);
+  return response.data;
+};
+
+export const deleteSemester = async (id) => {
+  const response = await apiClient.delete(`/academic/semesters/${id}`);
+  return response.data;
+};
+
+// Academic - Events
+export const getAcademicEvents = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/academic/events?${params}`);
+  return response.data;
+};
+
+export const getAcademicEvent = async (id) => {
+  const response = await apiClient.get(`/academic/events/${id}`);
+  return response.data;
+};
+
+export const createAcademicEvent = async (eventData) => {
+  const response = await apiClient.post('/academic/events', eventData);
+  return response.data;
+};
+
+export const updateAcademicEvent = async (id, eventData) => {
+  const response = await apiClient.put(`/academic/events/${id}`, eventData);
+  return response.data;
+};
+
+export const deleteAcademicEvent = async (id) => {
+  const response = await apiClient.delete(`/academic/events/${id}`);
+  return response.data;
+};
+
+export const getAcademicStats = async () => {
+  const response = await apiClient.get('/academic/stats');
+  return response.data;
+};
+
+// Sports - Facilities
+export const getSportsFacilities = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/sports/facilities?${params}`);
+  return response.data;
+};
+
+export const getSportsFacility = async (id) => {
+  const response = await apiClient.get(`/sports/facilities/${id}`);
+  return response.data;
+};
+
+export const createSportsFacility = async (facilityData) => {
+  const response = await apiClient.post('/sports/facilities', facilityData);
+  return response.data;
+};
+
+export const updateSportsFacility = async (id, facilityData) => {
+  const response = await apiClient.put(`/sports/facilities/${id}`, facilityData);
+  return response.data;
+};
+
+export const deleteSportsFacility = async (id) => {
+  const response = await apiClient.delete(`/sports/facilities/${id}`);
+  return response.data;
+};
+
+// Sports - Bookings
+export const getSportsBookings = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/sports/bookings?${params}`);
+  return response.data;
+};
+
+export const getSportsBooking = async (id) => {
+  const response = await apiClient.get(`/sports/bookings/${id}`);
+  return response.data;
+};
+
+export const createSportsBooking = async (bookingData) => {
+  const response = await apiClient.post('/sports/bookings', bookingData);
+  return response.data;
+};
+
+export const updateSportsBooking = async (id, bookingData) => {
+  const response = await apiClient.put(`/sports/bookings/${id}`, bookingData);
+  return response.data;
+};
+
+export const deleteSportsBooking = async (id) => {
+  const response = await apiClient.delete(`/sports/bookings/${id}`);
+  return response.data;
+};
+
+export const approveSportsBooking = async (id) => {
+  const response = await apiClient.put(`/sports/bookings/${id}/approve`);
+  return response.data;
+};
+
+export const rejectSportsBooking = async (id, reason) => {
+  const response = await apiClient.put(`/sports/bookings/${id}/reject`, { reason });
+  return response.data;
+};
+
+export const getSportsStats = async () => {
+  const response = await apiClient.get('/sports/stats');
+  return response.data;
+};
+
 export const adminService = {
   // Dashboard
   getDashboardStats,
@@ -388,6 +516,34 @@ export const adminService = {
   updateRoomAllocation,
   deleteRoomAllocation,
   getHostelStats,
+
+  // Academic
+  getSemesters,
+  getSemester,
+  createSemester,
+  updateSemester,
+  deleteSemester,
+  getAcademicEvents,
+  getAcademicEvent,
+  createAcademicEvent,
+  updateAcademicEvent,
+  deleteAcademicEvent,
+  getAcademicStats,
+
+  // Sports
+  getSportsFacilities,
+  getSportsFacility,
+  createSportsFacility,
+  updateSportsFacility,
+  deleteSportsFacility,
+  getSportsBookings,
+  getSportsBooking,
+  createSportsBooking,
+  updateSportsBooking,
+  deleteSportsBooking,
+  approveSportsBooking,
+  rejectSportsBooking,
+  getSportsStats,
 };
 
 export default adminService;

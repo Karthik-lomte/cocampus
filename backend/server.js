@@ -13,6 +13,8 @@ import approvalRoutes from './routes/approvalRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import feeRoutes from './routes/feeRoutes.js';
 import hostelRoutes from './routes/hostelRoutes.js';
+import academicRoutes from './routes/academicRoutes.js';
+import sportsRoutes from './routes/sportsRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -54,6 +56,8 @@ app.use('/api/approvals', approvalRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/hostels', hostelRoutes);
+app.use('/api/academic', academicRoutes);
+app.use('/api/sports', sportsRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -83,6 +87,8 @@ app.get('/', (req, res) => {
       dashboard: '/api/dashboard',
       fees: '/api/fees',
       hostels: '/api/hostels',
+      academic: '/api/academic',
+      sports: '/api/sports',
       health: '/api/health',
     },
   });
