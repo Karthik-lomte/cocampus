@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -13,31 +13,15 @@ import {
   ListChecks,
   Building2,
   Hash,
-  Star
+  Star,
+  RefreshCw
 } from 'lucide-react';
+import adminService from '../api/adminService';
 
 const SubjectManagement = () => {
-  const [subjects, setSubjects] = useState([
-    { id: 1, code: 'CS101', name: 'Introduction to Programming', credits: 4, type: 'Theory', department: 'Computer Science', semester: 1 },
-    { id: 2, code: 'CS102', name: 'Data Structures', credits: 4, type: 'Theory', department: 'Computer Science', semester: 2 },
-    { id: 3, code: 'CS103L', name: 'Programming Lab', credits: 2, type: 'Lab', department: 'Computer Science', semester: 1 },
-    { id: 4, code: 'CS201', name: 'Database Management Systems', credits: 4, type: 'Theory', department: 'Computer Science', semester: 3 },
-    { id: 5, code: 'CS202L', name: 'DBMS Lab', credits: 2, type: 'Lab', department: 'Computer Science', semester: 3 },
-    { id: 6, code: 'CS301E', name: 'Machine Learning', credits: 3, type: 'Elective', department: 'Computer Science', semester: 5 },
-    { id: 7, code: 'EC101', name: 'Basic Electronics', credits: 4, type: 'Theory', department: 'Electronics', semester: 1 },
-    { id: 8, code: 'EC102L', name: 'Electronics Lab', credits: 2, type: 'Lab', department: 'Electronics', semester: 1 },
-    { id: 9, code: 'EC201', name: 'Digital Signal Processing', credits: 4, type: 'Theory', department: 'Electronics', semester: 4 },
-    { id: 10, code: 'EC301E', name: 'VLSI Design', credits: 3, type: 'Elective', department: 'Electronics', semester: 6 },
-    { id: 11, code: 'ME101', name: 'Engineering Mechanics', credits: 4, type: 'Theory', department: 'Mechanical', semester: 1 },
-    { id: 12, code: 'ME102L', name: 'Workshop Practice', credits: 2, type: 'Lab', department: 'Mechanical', semester: 1 },
-    { id: 13, code: 'ME201', name: 'Thermodynamics', credits: 4, type: 'Theory', department: 'Mechanical', semester: 3 },
-    { id: 14, code: 'CE101', name: 'Surveying', credits: 4, type: 'Theory', department: 'Civil', semester: 2 },
-    { id: 15, code: 'CE201E', name: 'Environmental Engineering', credits: 3, type: 'Elective', department: 'Civil', semester: 5 },
-    { id: 16, code: 'IT101', name: 'Web Technologies', credits: 4, type: 'Theory', department: 'Information Technology', semester: 3 },
-    { id: 17, code: 'IT102L', name: 'Web Development Lab', credits: 2, type: 'Lab', department: 'Information Technology', semester: 3 },
-    { id: 18, code: 'MATH101', name: 'Engineering Mathematics I', credits: 4, type: 'Theory', department: 'Mathematics', semester: 1 }
-  ]);
-
+  const [subjects, setSubjects] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -48,8 +32,38 @@ const SubjectManagement = () => {
     code: '', name: '', credits: '', type: '', department: '', semester: ''
   });
 
-  const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology', 'Mathematics', 'Physics', 'Chemistry'];
   const subjectTypes = ['Theory', 'Lab', 'Elective'];
+
+  useEffect(() => {
+    fetchSubjects();
+    fetchDepartments();
+  }, []);
+
+  const fetchSubjects = async () => {
+    try {
+      setLoading(true);
+      const response = await adminService.getSubjects();
+      if (response.success) {
+        setSubjects(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+      alert('Error loading subjects. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await adminService.getDepartments();
+      if (response.success) {
+        setDepartments(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
 
   const theoryCount = subjects.filter(s => s.type === 'Theory').length;
   const labCount = subjects.filter(s => s.type === 'Lab').length;
@@ -63,47 +77,66 @@ const SubjectManagement = () => {
     return matchesSearch && matchesDepartment && matchesType;
   });
 
-  const handleAddSubject = (e) => {
+  const handleAddSubject = async (e) => {
     e.preventDefault();
-    const newSubject = {
-      id: subjects.length + 1,
-      code: formData.code,
-      name: formData.name,
-      credits: parseInt(formData.credits),
-      type: formData.type,
-      department: formData.department,
-      semester: parseInt(formData.semester)
-    };
-    setSubjects([...subjects, newSubject]);
-    setShowAddModal(false);
-    setFormData({ code: '', name: '', credits: '', type: '', department: '', semester: '' });
-    alert('Subject added successfully!');
+    try {
+      const subjectData = {
+        code: formData.code,
+        name: formData.name,
+        credits: parseInt(formData.credits),
+        type: formData.type,
+        department: formData.department,
+        semester: parseInt(formData.semester)
+      };
+      const response = await adminService.createSubject(subjectData);
+      if (response.success) {
+        alert('Subject added successfully!');
+        setShowAddModal(false);
+        setFormData({ code: '', name: '', credits: '', type: '', department: '', semester: '' });
+        fetchSubjects();
+      }
+    } catch (error) {
+      console.error('Error adding subject:', error);
+      alert(error.response?.data?.message || 'Error adding subject. Please try again.');
+    }
   };
 
-  const handleEditSubject = (e) => {
+  const handleEditSubject = async (e) => {
     e.preventDefault();
-    setSubjects(subjects.map(subject =>
-      subject.id === selectedSubject.id
-        ? {
-            ...subject,
-            code: formData.code,
-            name: formData.name,
-            credits: parseInt(formData.credits),
-            type: formData.type,
-            department: formData.department,
-            semester: parseInt(formData.semester)
-          }
-        : subject
-    ));
-    setShowEditModal(false);
-    setSelectedSubject(null);
-    alert('Subject updated successfully!');
+    try {
+      const subjectData = {
+        code: formData.code,
+        name: formData.name,
+        credits: parseInt(formData.credits),
+        type: formData.type,
+        department: formData.department,
+        semester: parseInt(formData.semester)
+      };
+      const response = await adminService.updateSubject(selectedSubject._id, subjectData);
+      if (response.success) {
+        alert('Subject updated successfully!');
+        setShowEditModal(false);
+        setSelectedSubject(null);
+        fetchSubjects();
+      }
+    } catch (error) {
+      console.error('Error updating subject:', error);
+      alert(error.response?.data?.message || 'Error updating subject. Please try again.');
+    }
   };
 
-  const handleDeleteSubject = (subjectId) => {
+  const handleDeleteSubject = async (subjectId) => {
     if (window.confirm('Are you sure you want to delete this subject?')) {
-      setSubjects(subjects.filter(s => s.id !== subjectId));
-      alert('Subject deleted successfully!');
+      try {
+        const response = await adminService.deleteSubject(subjectId);
+        if (response.success) {
+          alert('Subject deleted successfully!');
+          fetchSubjects();
+        }
+      } catch (error) {
+        console.error('Error deleting subject:', error);
+        alert(error.response?.data?.message || 'Error deleting subject. Please try again.');
+      }
     }
   };
 
@@ -138,6 +171,17 @@ const SubjectManagement = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading subjects...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -146,8 +190,19 @@ const SubjectManagement = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-6 text-white"
       >
-        <h1 className="text-3xl font-bold mb-2">Subject Management</h1>
-        <p className="text-indigo-100">Manage courses, credits, and department assignments</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Subject Management</h1>
+            <p className="text-indigo-100">Manage courses, credits, and department assignments</p>
+          </div>
+          <button
+            onClick={fetchSubjects}
+            className="flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-5 h-5 mr-2" />
+            Refresh
+          </button>
+        </div>
       </motion.div>
 
       {/* Stats Cards */}
@@ -245,7 +300,7 @@ const SubjectManagement = () => {
           >
             <option value="all">All Departments</option>
             {departments.map(dept => (
-              <option key={dept} value={dept}>{dept}</option>
+              <option key={dept._id} value={dept.name}>{dept.name}</option>
             ))}
           </select>
           <select
@@ -293,7 +348,7 @@ const SubjectManagement = () => {
                 const TypeIcon = getTypeIcon(subject.type);
                 const typeColor = getTypeColor(subject.type);
                 return (
-                  <tr key={subject.id} className="hover:bg-gray-50">
+                  <tr key={subject._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-mono">
                         {subject.code}
@@ -336,7 +391,7 @@ const SubjectManagement = () => {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteSubject(subject.id)}
+                          onClick={() => handleDeleteSubject(subject._id)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete"
                         >
@@ -459,7 +514,7 @@ const SubjectManagement = () => {
                   >
                     <option value="">Select department</option>
                     {departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                      <option key={dept._id} value={dept.name}>{dept.name}</option>
                     ))}
                   </select>
                 </div>
@@ -579,7 +634,7 @@ const SubjectManagement = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   >
                     {departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                      <option key={dept._id} value={dept.name}>{dept.name}</option>
                     ))}
                   </select>
                 </div>
