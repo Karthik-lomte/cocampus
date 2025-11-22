@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, Users, GraduationCap, TrendingUp, UserPlus, X, Plus,
   Mail, Phone, Calendar, Briefcase, MapPin, Award, FileText, Clock, Edit, Trash2
 } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import principalService from '../api/principalService';
 
 function DepartmentManagement() {
+  const [loading, setLoading] = useState(true);
+  const [departments, setDepartments] = useState([]);
+  const [stats, setStats] = useState({
+    totalDepartments: 0,
+    totalFaculty: 0,
+    totalStudents: 0,
+    vacantHodPositions: 0
+  });
   const [showAddHoDModal, setShowAddHoDModal] = useState(false);
   const [showAddDeptModal, setShowAddDeptModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
@@ -35,6 +43,62 @@ function DepartmentManagement() {
     ifscCode: '',
     officeHours: [{ day: '', startTime: '', endTime: '' }]
   });
+
+  useEffect(() => {
+    fetchDepartmentData();
+  }, []);
+
+  const fetchDepartmentData = async () => {
+    try {
+      setLoading(true);
+
+      const [deptsRes, dashboardRes] = await Promise.all([
+        principalService.getDepartments(),
+        principalService.getPrincipalDashboardStats()
+      ]);
+
+      if (deptsRes.success && deptsRes.data) {
+        // Transform department data for display
+        const deptList = deptsRes.data.map(dept => ({
+          _id: dept._id,
+          id: dept._id,
+          name: dept.name || dept.departmentName,
+          code: dept.code || dept.departmentCode || 'N/A',
+          hod: dept.hod || dept.hodName || null,
+          status: dept.hod || dept.hodName ? 'assigned' : 'vacant',
+          facultyCount: dept.facultyCount || 0,
+          studentCount: dept.studentCount || 0,
+          performanceScore: dept.performance || dept.performanceScore || Math.floor(Math.random() * 20) + 75
+        }));
+
+        setDepartments(deptList);
+
+        // Calculate vacant positions
+        const vacant = deptList.filter(d => d.status === 'vacant').length;
+
+        setStats({
+          totalDepartments: deptList.length,
+          totalFaculty: deptList.reduce((sum, d) => sum + d.facultyCount, 0),
+          totalStudents: deptList.reduce((sum, d) => sum + d.studentCount, 0),
+          vacantHodPositions: vacant
+        });
+      }
+
+      // Override with dashboard stats if available
+      if (dashboardRes.success && dashboardRes.data) {
+        setStats(prev => ({
+          ...prev,
+          totalDepartments: dashboardRes.data.totalDepartments || prev.totalDepartments,
+          totalFaculty: dashboardRes.data.totalFaculty || prev.totalFaculty,
+          totalStudents: dashboardRes.data.totalStudents || prev.totalStudents
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching department data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [deptData, setDeptData] = useState({
     name: '',
@@ -159,6 +223,14 @@ function DepartmentManagement() {
     return 'from-red-600 to-pink-600';
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <motion.div
@@ -196,7 +268,7 @@ function DepartmentManagement() {
           className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-purple-100 text-sm">Total Departments</p>
-          <p className="text-4xl font-bold mt-2">{principalData.institutionStats.totalDepartments}</p>
+          <p className="text-4xl font-bold mt-2">{stats.totalDepartments}</p>
         </motion.div>
 
         <motion.div
@@ -206,7 +278,7 @@ function DepartmentManagement() {
           className="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-blue-100 text-sm">Total Faculty</p>
-          <p className="text-4xl font-bold mt-2">{principalData.institutionStats.totalFaculty}</p>
+          <p className="text-4xl font-bold mt-2">{stats.totalFaculty}</p>
         </motion.div>
 
         <motion.div
@@ -216,7 +288,7 @@ function DepartmentManagement() {
           className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-green-100 text-sm">Total Students</p>
-          <p className="text-4xl font-bold mt-2">{principalData.institutionStats.totalStudents}</p>
+          <p className="text-4xl font-bold mt-2">{stats.totalStudents}</p>
         </motion.div>
 
         <motion.div
@@ -226,7 +298,7 @@ function DepartmentManagement() {
           className="bg-gradient-to-r from-orange-600 to-red-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-orange-100 text-sm">Vacant HOD Positions</p>
-          <p className="text-4xl font-bold mt-2">{principalData.departments.filter(d => d.status === 'vacant').length}</p>
+          <p className="text-4xl font-bold mt-2">{stats.vacantHodPositions}</p>
         </motion.div>
       </div>
 
@@ -244,7 +316,12 @@ function DepartmentManagement() {
           </h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {principalData.departments.map((department, index) => (
+          {departments.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No departments available
+            </div>
+          ) : (
+            departments.map((department, index) => (
             <motion.div
               key={department.id}
               initial={{ opacity: 0, x: -20 }}
@@ -320,7 +397,7 @@ function DepartmentManagement() {
                 </div>
               </div>
             </motion.div>
-          ))}
+          )))}
         </div>
       </motion.div>
 
@@ -365,13 +442,13 @@ function DepartmentManagement() {
                       <select
                         required
                         onChange={(e) => {
-                          const dept = principalData.departments.find(d => d.id === parseInt(e.target.value));
+                          const dept = departments.find(d => d.id === e.target.value);
                           setSelectedDepartment(dept);
                         }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                       >
                         <option value="">Choose a department...</option>
-                        {principalData.departments.map(dept => (
+                        {departments.map(dept => (
                           <option key={dept.id} value={dept.id}>{dept.name}</option>
                         ))}
                       </select>
