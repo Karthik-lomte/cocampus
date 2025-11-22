@@ -104,6 +104,21 @@ export const adminService = {
     return response.data.data;
   },
 
+  updateFeeStructure: async (id, data) => {
+    const response = await api.put(`/admin/fees/structures/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteFeeStructure: async (id) => {
+    const response = await api.delete(`/admin/fees/structures/${id}`);
+    return response.data.data;
+  },
+
+  getPayments: async (params = {}) => {
+    const response = await api.get('/admin/fees/payments', { params });
+    return response.data.data;
+  },
+
   // Hostel Management
   getHostelBlocks: async () => {
     const response = await api.get('/admin/hostel/blocks');
