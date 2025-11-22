@@ -1,34 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Award, Calendar, Users, Edit2, Save, X } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function ClubProfile() {
-  const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: clubData.clubInfo.name,
-    id: clubData.clubInfo.id,
-    president: clubData.clubInfo.president,
-    vicePresident: clubData.clubInfo.vicePresident,
-    facultyAdvisor: clubData.clubInfo.facultyAdvisor,
-    establishedYear: clubData.clubInfo.establishedYear,
-    email: 'tech.club@college.edu',
-    phone: '+91 9876543210',
-    location: 'Room 301, Student Activity Center',
-    description: 'The Technical Club is dedicated to fostering innovation and technical excellence among students. We organize workshops, hackathons, and technical events throughout the academic year.',
-    vision: 'To create a community of technically proficient students who can solve real-world problems through innovation and collaboration.',
-    mission: 'Provide hands-on learning experiences, organize technical events, and build a strong technical community on campus.'
-  });
+  const toast = useToast();
 
-  const handleSave = () => {
-    alert('Profile updated successfully!');
-    setIsEditing(false);
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [profileData, setProfileData] = useState({});
+  const [originalData, setOriginalData] = useState({});
+
+  // Load Profile
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await clubService.getProfile();
+      setProfileData(data);
+      setOriginalData(data);
+    } catch (err) {
+      console.error('Error loading club profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await clubService.updateProfile(profileData);
+      toast.success('Profile updated successfully!');
+      setIsEditing(false);
+      setOriginalData(profileData);
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
+    setProfileData(originalData);
     setIsEditing(false);
-    // Reset to original data if needed
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading club profile..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

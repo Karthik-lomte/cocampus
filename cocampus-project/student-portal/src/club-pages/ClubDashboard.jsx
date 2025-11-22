@@ -1,11 +1,59 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Users, TrendingUp, DollarSign, Award, Bell, UserCheck } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function ClubDashboard() {
-  const clubInfo = clubData.clubInfo;
-  const recentEvents = clubData.eventRequests.slice(0, 3);
-  const recentMembers = clubData.clubMembers.slice(0, 5);
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [dashboardData, setDashboardData] = useState({
+    clubInfo: {},
+    recentEvents: [],
+    recentMembers: []
+  });
+
+  const clubInfo = dashboardData.clubInfo;
+  const recentEvents = dashboardData.recentEvents;
+  const recentMembers = dashboardData.recentMembers;
+
+  // Load Dashboard Data
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await clubService.getDashboard();
+      setDashboardData({
+        clubInfo: data.clubInfo || {},
+        recentEvents: data.recentEvents || [],
+        recentMembers: data.recentMembers || []
+      });
+    } catch (err) {
+      console.error('Error loading club dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading club dashboard..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -96,7 +144,7 @@ function ClubDashboard() {
           </div>
           <h3 className="text-gray-600 text-sm mb-1">Pending Approvals</h3>
           <p className="text-3xl font-bold text-gray-900">
-            {clubData.eventRequests.filter(e => e.status === 'pending').length}
+            {clubInfo.pendingApprovals || 0}
           </p>
           <p className="text-xs text-orange-600 mt-2">Awaiting principal review</p>
         </motion.div>
