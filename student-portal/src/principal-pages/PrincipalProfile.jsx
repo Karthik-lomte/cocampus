@@ -1,8 +1,67 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Award, Calendar, Briefcase, GraduationCap, Building2, Users } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { useAuth } from '../context/AuthContext';
+import principalService from '../api/principalService';
 
 function PrincipalProfile() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalFaculty: 0,
+    totalStaff: 0,
+    totalDepartments: 0,
+    passPercentage: 0
+  });
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const response = await principalService.getPrincipalDashboardStats();
+
+      if (response.success && response.data) {
+        setStats({
+          totalStudents: response.data.totalStudents || 0,
+          totalFaculty: response.data.totalFaculty || 0,
+          totalStaff: response.data.totalStaff || 0,
+          totalDepartments: response.data.totalDepartments || 0,
+          passPercentage: response.data.passPercentage || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  // Use actual user data or fallback to default values
+  const profile = {
+    name: user?.name || 'Principal',
+    email: user?.email || 'principal@cocampus.edu',
+    phone: user?.phone || '+91 98765 43210',
+    employeeId: user?.employeeId || user?.userId || 'EMP001',
+    designation: 'Principal',
+    institution: 'Co-Campus College of Engineering',
+    joinDate: user?.joinDate || '2015-07-01',
+    experience: '25+ Years',
+    qualification: 'Ph.D.',
+    avatar: user?.avatar || '/assets/default-avatar.png'
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -21,28 +80,26 @@ function PrincipalProfile() {
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 h-32"></div>
             <div className="relative px-6 pb-6">
               <div className="absolute -top-16 left-6">
-                <img
-                  src={principalData.profile.avatar}
-                  alt={principalData.profile.name}
-                  className="w-32 h-32 rounded-full ring-4 ring-white"
-                />
+                <div className="w-32 h-32 rounded-full ring-4 ring-white bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-4xl font-bold">
+                  {profile.name.charAt(0).toUpperCase()}
+                </div>
               </div>
               <div className="pt-20">
-                <h2 className="text-2xl font-bold text-gray-900">{principalData.profile.name}</h2>
-                <p className="text-gray-600">{principalData.profile.designation}</p>
-                <p className="text-sm text-gray-500">{principalData.profile.employeeId}</p>
+                <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
+                <p className="text-gray-600">{profile.designation}</p>
+                <p className="text-sm text-gray-500">{profile.employeeId}</p>
                 <div className="mt-6 space-y-3">
                   <div className="flex items-center text-gray-600">
                     <Mail size={16} className="mr-3" />
-                    <span className="text-sm">{principalData.profile.email}</span>
+                    <span className="text-sm">{profile.email}</span>
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Phone size={16} className="mr-3" />
-                    <span className="text-sm">{principalData.profile.phone}</span>
+                    <span className="text-sm">{profile.phone}</span>
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Building2 size={16} className="mr-3" />
-                    <span className="text-sm">{principalData.profile.institution}</span>
+                    <span className="text-sm">{profile.institution}</span>
                   </div>
                 </div>
               </div>
@@ -60,23 +117,23 @@ function PrincipalProfile() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Total Students</span>
-                <span className="font-bold text-purple-600">{principalData.institutionStats.totalStudents}</span>
+                <span className="font-bold text-purple-600">{stats.totalStudents}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Total Faculty</span>
-                <span className="font-bold text-blue-600">{principalData.institutionStats.totalFaculty}</span>
+                <span className="font-bold text-blue-600">{stats.totalFaculty}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Total Staff</span>
-                <span className="font-bold text-green-600">{principalData.institutionStats.totalStaff}</span>
+                <span className="font-bold text-green-600">{stats.totalStaff}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Departments</span>
-                <span className="font-bold text-orange-600">{principalData.institutionStats.totalDepartments}</span>
+                <span className="font-bold text-orange-600">{stats.totalDepartments}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Pass %</span>
-                <span className="font-bold text-indigo-600">{principalData.institutionStats.passPercentage}%</span>
+                <span className="font-bold text-indigo-600">{stats.passPercentage}%</span>
               </div>
             </div>
           </motion.div>
@@ -98,27 +155,27 @@ function PrincipalProfile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Institution</p>
-                <p className="font-semibold text-gray-900">{principalData.profile.institution}</p>
+                <p className="font-semibold text-gray-900">{profile.institution}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Designation</p>
-                <p className="font-semibold text-gray-900">{principalData.profile.designation}</p>
+                <p className="font-semibold text-gray-900">{profile.designation}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Employee ID</p>
-                <p className="font-semibold text-gray-900">{principalData.profile.employeeId}</p>
+                <p className="font-semibold text-gray-900">{profile.employeeId}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Date of Joining</p>
-                <p className="font-semibold text-gray-900">{new Date(principalData.profile.joinDate).toLocaleDateString()}</p>
+                <p className="font-semibold text-gray-900">{new Date(profile.joinDate).toLocaleDateString()}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Experience</p>
-                <p className="font-semibold text-gray-900">{principalData.profile.experience}</p>
+                <p className="font-semibold text-gray-900">{profile.experience}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Qualification</p>
-                <p className="font-semibold text-gray-900">{principalData.profile.qualification}</p>
+                <p className="font-semibold text-gray-900">{profile.qualification}</p>
               </div>
             </div>
           </div>
