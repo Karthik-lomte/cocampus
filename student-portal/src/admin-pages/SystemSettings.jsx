@@ -23,7 +23,7 @@ import {
   Database,
   Activity
 } from 'lucide-react';
-import adminService from '../services/adminService';
+import adminService from '../api/adminService';
 
 const SystemSettings = () => {
   const [activeSection, setActiveSection] = useState('system');
