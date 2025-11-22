@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, CheckCircle, XCircle, Calendar, User, Plus, X, Upload } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function LeaveManagement() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [principalData, setPrincipalData] = useState({ hodLeaveRequests: [] });
+
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [approvalAction, setApprovalAction] = useState('');
@@ -17,6 +26,24 @@ function LeaveManagement() {
     document: null
   });
 
+  useEffect(() => {
+    loadLeaveRequests();
+  }, []);
+
+  const loadLeaveRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getLeaveRequests();
+      setPrincipalData({ hodLeaveRequests: data.leaveRequests || data || [] });
+    } catch (err) {
+      console.error('Error loading leave requests:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleApprove = (leave) => {
     setSelectedLeave(leave);
     setApprovalAction('approve');
@@ -29,23 +56,53 @@ function LeaveManagement() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
-    alert('Leave ' + approvalAction + 'd successfully for ' + selectedLeave.hodName + '!');
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setSubmitting(true);
+      await principalService.approveRequest(selectedLeave.id, {
+        action: approvalAction,
+        remarks
+      });
+      toast.success(`Leave ${approvalAction}d successfully for ${selectedLeave.hodName}!`);
+      await loadLeaveRequests();
+      setShowApprovalModal(false);
+      setRemarks('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || `Failed to ${approvalAction} leave request`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
-    alert('Leave application submitted to Admin successfully!');
-    setShowApplyModal(false);
-    setLeaveApplication({ leaveType: '', startDate: '', endDate: '', reason: '', document: null });
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      Object.keys(leaveApplication).forEach(key => {
+        if (leaveApplication[key]) formData.append(key, leaveApplication[key]);
+      });
+
+      await principalService.approveRequest(0, { type: 'apply_leave', data: formData });
+      toast.success('Leave application submitted to Admin successfully!');
+      await loadLeaveRequests();
+      setShowApplyModal(false);
+      setLeaveApplication({ leaveType: '', startDate: '', endDate: '', reason: '', document: null });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit leave application');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) return <Loading fullScreen message="Loading leave management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadLeaveRequests} fullScreen />;
 
   const getLeaveTypeColor = (type) => {
     const colors = {
