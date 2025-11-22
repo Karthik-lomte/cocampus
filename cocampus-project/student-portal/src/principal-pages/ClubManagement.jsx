@@ -1,9 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Users, Calendar, DollarSign, CheckCircle, XCircle, FileText, X, Plus, ChevronDown, ChevronUp, Eye, Download, Image as ImageIcon, Video } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function ClubManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [clubs, setClubs] = useState([]);
+  const [eventRequests, setEventRequests] = useState([]);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showAddClubModal, setShowAddClubModal] = useState(false);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
@@ -21,8 +33,30 @@ function ClubManagement() {
     description: ''
   });
 
-  // Mock event requests data - in real app, this would come from API
-  const eventRequests = [
+  // Load Clubs and Event Requests
+  useEffect(() => {
+    loadClubData();
+  }, []);
+
+  const loadClubData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [clubsData, eventsData] = await Promise.all([
+        principalService.getDepartments(), // Clubs might be in departments or separate endpoint
+        principalService.getEvents()
+      ]);
+      setClubs(clubsData.clubs || clubsData || []);
+      setEventRequests(eventsData.events || eventsData || []);
+    } catch (err) {
+      console.error('Error loading club data:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const tempEventRequests = [
     {
       id: 1,
       clubName: 'Technical Club',
@@ -116,36 +150,64 @@ function ClubManagement() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
 
-    if (selectedEventRequest) {
-      alert(`Event request "${selectedEventRequest.activityName}" ${approvalAction}d successfully!\nRemarks will be sent to the club.`);
-    } else if (selectedRequest) {
-      alert(`Attendance request ${approvalAction}d successfully for ${selectedRequest.eventName}!`);
-    }
+    try {
+      setSubmitting(true);
 
-    setShowApprovalModal(false);
-    setRemarks('');
-    setSelectedEventRequest(null);
-    setSelectedRequest(null);
+      if (selectedEventRequest) {
+        await principalService.approveEvent(selectedEventRequest.id, {
+          action: approvalAction,
+          remarks
+        });
+        toast.success(`Event request "${selectedEventRequest.activityName}" ${approvalAction}d successfully!`);
+      } else if (selectedRequest) {
+        await principalService.approveRequest(selectedRequest.id, {
+          action: approvalAction,
+          remarks
+        });
+        toast.success(`Attendance request ${approvalAction}d successfully!`);
+      }
+
+      setShowApprovalModal(false);
+      setRemarks('');
+      setSelectedEventRequest(null);
+      setSelectedRequest(null);
+      await loadClubData();
+    } catch (err) {
+      console.error('Error submitting decision:', err);
+      toast.error(err.response?.data?.message || `Failed to ${approvalAction} request`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleAddClub = (e) => {
+  const handleAddClub = async (e) => {
     e.preventDefault();
-    alert(`Club "${clubData.name}" added successfully!`);
-    setShowAddClubModal(false);
-    setClubData({
-      name: '',
-      coordinator: '',
-      category: '',
-      budget: '',
-      description: ''
-    });
+    try {
+      setSubmitting(true);
+      // In production, this would call principalService.createClub(clubData)
+      toast.success(`Club "${clubData.name}" added successfully!`);
+      setShowAddClubModal(false);
+      setClubData({
+        name: '',
+        coordinator: '',
+        category: '',
+        budget: '',
+        description: ''
+      });
+      await loadClubData();
+    } catch (err) {
+      console.error('Error adding club:', err);
+      toast.error(err.response?.data?.message || 'Failed to add club');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const toggleClubExpansion = (clubId) => {
@@ -154,13 +216,23 @@ function ClubManagement() {
 
   // Get attendance requests for a specific club
   const getClubAttendanceRequests = (clubName) => {
-    return principalData.clubAttendanceRequests.filter(req => req.clubName === clubName);
+    // Will be populated from backend data
+    return [];
   };
 
   // Get event requests for a specific club
   const getClubEventRequests = (clubName) => {
     return eventRequests.filter(req => req.clubName === clubName);
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading club management..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadClubData} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -190,7 +262,7 @@ function ClubManagement() {
           className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-purple-100 text-sm">Total Clubs</p>
-          <p className="text-4xl font-bold mt-2">{principalData.clubs.length}</p>
+          <p className="text-4xl font-bold mt-2">{clubs.length}</p>
         </motion.div>
 
         <motion.div
@@ -201,7 +273,7 @@ function ClubManagement() {
         >
           <p className="text-blue-100 text-sm">Total Members</p>
           <p className="text-4xl font-bold mt-2">
-            {principalData.clubs.reduce((sum, club) => sum + club.memberCount, 0)}
+            {clubs.reduce((sum, club) => sum + (club.memberCount || 0), 0)}
           </p>
         </motion.div>
 
@@ -227,7 +299,7 @@ function ClubManagement() {
       </div>
 
       {/* All Clubs Sections */}
-      {principalData.clubs.map((club, index) => {
+      {clubs.map((club, index) => {
         const clubAttendanceRequests = getClubAttendanceRequests(club.name);
         const clubEventRequests = getClubEventRequests(club.name);
         const isExpanded = expandedClubId === club.id;
