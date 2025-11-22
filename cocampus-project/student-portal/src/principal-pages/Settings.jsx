@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Settings as SettingsIcon, Bell, Lock, Globe, Mail, Shield, Save } from 'lucide-react';
+import { useToast } from '../components/Toast';
 
 function Settings() {
+  const toast = useToast();
+  const [submitting, setSubmitting] = useState(false);
+
   const [settings, setSettings] = useState({
     // Notification Settings
     emailNotifications: true,
@@ -25,9 +29,20 @@ function Settings() {
     sessionTimeout: '30'
   });
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    alert('Settings saved successfully!');
+    try {
+      setSubmitting(true);
+      // Settings are saved to local storage for now
+      // In production, this would call principalService.updateSettings(settings)
+      localStorage.setItem('principalSettings', JSON.stringify(settings));
+      toast.success('Settings saved successfully!');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      toast.error('Failed to save settings');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -304,10 +319,11 @@ function Settings() {
         >
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
+            disabled={submitting}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={20} />
-            Save All Settings
+            {submitting ? 'Saving...' : 'Save All Settings'}
           </button>
         </motion.div>
       </form>
