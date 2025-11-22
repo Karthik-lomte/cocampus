@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
@@ -11,138 +11,17 @@ import {
   GraduationCap,
   UserCheck
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const DepartmentManagement = () => {
-  const [departments, setDepartments] = useState([
-    {
-      id: 1,
-      name: 'Computer Science',
-      code: 'CSE',
-      hod: 'Dr. Rajesh Kumar',
-      hodId: 'HOD2018001',
-      facultyCount: 45,
-      studentCount: 850,
-      performance: 88,
-      yearEstablished: 1995,
-      email: 'cse@university.edu',
-      phone: '+91-9876543210',
-      location: 'Block A, Room 101-120',
-      vision: 'To be a globally recognized center of excellence in computer science education and research.',
-      mission: 'To produce industry-ready professionals with strong technical foundations and ethical values.'
-    },
-    {
-      id: 2,
-      name: 'Electronics & Communication',
-      code: 'ECE',
-      hod: 'Dr. Priya Sharma',
-      hodId: 'HOD2019002',
-      facultyCount: 32,
-      studentCount: 620,
-      performance: 85,
-      yearEstablished: 1998,
-      email: 'ece@university.edu',
-      phone: '+91-9876543211',
-      location: 'Block B, Room 201-215',
-      vision: 'To lead in electronics and communication innovations that transform society.',
-      mission: 'To nurture engineers who excel in design, development, and research of electronic systems.'
-    },
-    {
-      id: 3,
-      name: 'Mechanical Engineering',
-      code: 'ME',
-      hod: 'Dr. Amit Singh',
-      hodId: 'HOD2017003',
-      facultyCount: 30,
-      studentCount: 580,
-      performance: 82,
-      yearEstablished: 1990,
-      email: 'me@university.edu',
-      phone: '+91-9876543212',
-      location: 'Block C, Room 301-318',
-      vision: 'To be a premier institution for mechanical engineering education and sustainable innovation.',
-      mission: 'To develop skilled engineers capable of solving complex mechanical challenges.'
-    },
-    {
-      id: 4,
-      name: 'Civil Engineering',
-      code: 'CE',
-      hod: 'Dr. Neha Gupta',
-      hodId: 'HOD2020004',
-      facultyCount: 25,
-      studentCount: 450,
-      performance: 80,
-      yearEstablished: 1992,
-      email: 'ce@university.edu',
-      phone: '+91-9876543213',
-      location: 'Block D, Room 401-412',
-      vision: 'To shape the future of infrastructure through innovative civil engineering practices.',
-      mission: 'To educate civil engineers who build sustainable and resilient infrastructure.'
-    },
-    {
-      id: 5,
-      name: 'Information Technology',
-      code: 'IT',
-      hod: 'Dr. Vikram Patel',
-      hodId: 'HOD2018005',
-      facultyCount: 28,
-      studentCount: 520,
-      performance: 86,
-      yearEstablished: 2000,
-      email: 'it@university.edu',
-      phone: '+91-9876543214',
-      location: 'Block A, Room 201-215',
-      vision: 'To be at the forefront of information technology advancements and digital transformation.',
-      mission: 'To produce IT professionals who drive innovation and digital solutions globally.'
-    },
-    {
-      id: 6,
-      name: 'Electrical Engineering',
-      code: 'EE',
-      hod: 'Dr. Sunita Devi',
-      hodId: 'HOD2016006',
-      facultyCount: 22,
-      studentCount: 380,
-      performance: 79,
-      yearEstablished: 1988,
-      email: 'ee@university.edu',
-      phone: '+91-9876543215',
-      location: 'Block E, Room 101-110',
-      vision: 'To lead in electrical engineering education for a sustainable energy future.',
-      mission: 'To develop electrical engineers who innovate in power systems and renewable energy.'
-    },
-    {
-      id: 7,
-      name: 'Chemical Engineering',
-      code: 'CHE',
-      hod: 'Dr. Rohit Verma',
-      hodId: 'HOD2021007',
-      facultyCount: 18,
-      studentCount: 320,
-      performance: 77,
-      yearEstablished: 2005,
-      email: 'che@university.edu',
-      phone: '+91-9876543216',
-      location: 'Block F, Room 101-108',
-      vision: 'To excel in chemical engineering research for industrial and environmental advancement.',
-      mission: 'To train chemical engineers who optimize processes and ensure environmental safety.'
-    },
-    {
-      id: 8,
-      name: 'Biotechnology',
-      code: 'BT',
-      hod: 'Dr. Anita Reddy',
-      hodId: 'HOD2019008',
-      facultyCount: 15,
-      studentCount: 280,
-      performance: 84,
-      yearEstablished: 2008,
-      email: 'bt@university.edu',
-      phone: '+91-9876543217',
-      location: 'Block G, Room 101-106',
-      vision: 'To pioneer biotechnology solutions for healthcare and agricultural challenges.',
-      mission: 'To educate biotechnologists who advance life sciences and improve human welfare.'
-    }
-  ]);
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [departments, setDepartments] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -159,79 +38,111 @@ const DepartmentManagement = () => {
     mission: ''
   });
 
-  const totalFaculty = departments.reduce((sum, dept) => sum + dept.facultyCount, 0);
-  const totalStudents = departments.reduce((sum, dept) => sum + dept.studentCount, 0);
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const loadDepartments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getDepartments();
+      setDepartments(data.departments || data || []);
+    } catch (err) {
+      console.error('Departments error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalFaculty = departments.reduce((sum, dept) => sum + (dept.facultyCount || 0), 0);
+  const totalStudents = departments.reduce((sum, dept) => sum + (dept.studentCount || 0), 0);
 
   const filteredDepartments = departments.filter(dept =>
     dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     dept.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    dept.hod.toLowerCase().includes(searchTerm.toLowerCase())
+    (dept.hod && dept.hod.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleAddDepartment = (e) => {
+  const handleAddDepartment = async (e) => {
     e.preventDefault();
-    const newDepartment = {
-      id: departments.length + 1,
-      name: formData.name,
-      code: formData.code,
-      hod: 'To be assigned',
-      hodId: '',
-      facultyCount: 0,
-      studentCount: 0,
-      performance: 0,
-      yearEstablished: parseInt(formData.yearEstablished),
-      email: formData.email,
-      phone: formData.phone,
-      location: formData.location,
-      vision: formData.vision,
-      mission: formData.mission
-    };
-    setDepartments([...departments, newDepartment]);
-    setShowAddModal(false);
-    setFormData({
-      name: '',
-      code: '',
-      yearEstablished: '',
-      email: '',
-      phone: '',
-      location: '',
-      vision: '',
-      mission: ''
-    });
-    alert('Department added successfully!');
+    try {
+      setSubmitting(true);
+      const deptData = {
+        name: formData.name,
+        code: formData.code,
+        yearEstablished: parseInt(formData.yearEstablished),
+        email: formData.email,
+        phone: formData.phone,
+        location: formData.location,
+        vision: formData.vision,
+        mission: formData.mission
+      };
+      await adminService.createDepartment(deptData);
+      toast.success('Department added successfully!');
+      await loadDepartments();
+      setShowAddModal(false);
+      setFormData({
+        name: '',
+        code: '',
+        yearEstablished: '',
+        email: '',
+        phone: '',
+        location: '',
+        vision: '',
+        mission: ''
+      });
+    } catch (err) {
+      console.error('Add department error:', err);
+      toast.error(err.response?.data?.message || 'Failed to add department');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditDepartment = (e) => {
+  const handleEditDepartment = async (e) => {
     e.preventDefault();
-    setDepartments(departments.map(dept =>
-      dept.id === selectedDepartment.id
-        ? {
-            ...dept,
-            name: formData.name,
-            code: formData.code,
-            yearEstablished: parseInt(formData.yearEstablished),
-            email: formData.email,
-            phone: formData.phone,
-            location: formData.location,
-            vision: formData.vision,
-            mission: formData.mission
-          }
-        : dept
-    ));
-    setShowEditModal(false);
-    setSelectedDepartment(null);
-    alert('Department updated successfully!');
+    try {
+      setSubmitting(true);
+      const deptData = {
+        name: formData.name,
+        code: formData.code,
+        yearEstablished: parseInt(formData.yearEstablished),
+        email: formData.email,
+        phone: formData.phone,
+        location: formData.location,
+        vision: formData.vision,
+        mission: formData.mission
+      };
+      await adminService.updateDepartment(selectedDepartment.id, deptData);
+      toast.success('Department updated successfully!');
+      await loadDepartments();
+      setShowEditModal(false);
+      setSelectedDepartment(null);
+    } catch (err) {
+      console.error('Update department error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update department');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteDepartment = (deptId) => {
+  const handleDeleteDepartment = async (deptId) => {
     const dept = departments.find(d => d.id === deptId);
-    if (dept.studentCount > 0 || dept.facultyCount > 0) {
-      alert('Cannot delete department with active students or faculty. Please reassign them first.');
+    if (dept && ((dept.studentCount || 0) > 0 || (dept.facultyCount || 0) > 0)) {
+      toast.error('Cannot delete department with active students or faculty. Please reassign them first.');
       return;
     }
     if (window.confirm('Are you sure you want to delete this department?')) {
-      setDepartments(departments.filter(d => d.id !== deptId));
-      alert('Department deleted successfully!');
+      try {
+        await adminService.deleteDepartment(deptId);
+        toast.success('Department deleted successfully!');
+        await loadDepartments();
+      } catch (err) {
+        console.error('Delete department error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete department');
+      }
     }
   };
 
@@ -249,6 +160,9 @@ const DepartmentManagement = () => {
     });
     setShowEditModal(true);
   };
+
+  if (loading) return <Loading fullScreen message="Loading department management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadDepartments} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -545,15 +459,17 @@ const DepartmentManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Department
+                    {submitting ? 'Adding...' : 'Add Department'}
                   </button>
                 </div>
               </form>
@@ -673,15 +589,17 @@ const DepartmentManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
