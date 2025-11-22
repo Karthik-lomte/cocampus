@@ -4,8 +4,13 @@ import {
   UserPlus, Mail, Phone, Calendar, Briefcase, GraduationCap,
   MapPin, Award, BookOpen, Clock, Plus, X, FileText
 } from 'lucide-react';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
 
 function AddFaculty() {
+  const toast = useToast();
+  const [submitting, setSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -116,11 +121,52 @@ function AddFaculty() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Faculty Data:', formData);
-    alert(`Faculty ${formData.name} added successfully!`);
-    // Reset form or redirect
+
+    try {
+      setSubmitting(true);
+      await hodService.createFaculty(formData);
+      toast.success(`Faculty ${formData.name} added successfully!`);
+
+      // Reset form
+      setFormData({
+        name: '',
+        employeeId: '',
+        email: '',
+        phone: '',
+        dateOfBirth: '',
+        gender: '',
+        bloodGroup: '',
+        department: '',
+        designation: '',
+        joinDate: '',
+        employmentType: '',
+        cabinNumber: '',
+        qualifications: [{ degree: '', institution: '', year: '', specialization: '' }],
+        totalExperience: '',
+        previousPositions: [{ role: '', institution: '', duration: '' }],
+        specializations: [''],
+        emergencyContact: '',
+        emergencyRelation: '',
+        address: '',
+        city: '',
+        state: '',
+        pincode: '',
+        aadharNumber: '',
+        panNumber: '',
+        bankAccountNumber: '',
+        bankName: '',
+        ifscCode: '',
+        assignedSubjects: [{ code: '', name: '', classes: '', credits: '' }],
+        officeHours: [{ days: '', timing: '' }]
+      });
+    } catch (err) {
+      console.error('Error adding faculty:', err);
+      toast.error(err.response?.data?.message || 'Failed to add faculty member');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -798,15 +844,17 @@ function AddFaculty() {
         >
           <button
             type="button"
-            className="flex-1 px-6 py-4 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-lg"
+            disabled={submitting}
+            className="flex-1 px-6 py-4 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="flex-1 px-6 py-4 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium text-lg"
+            disabled={submitting}
+            className="flex-1 px-6 py-4 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium text-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Add Faculty
+            {submitting ? 'Adding Faculty...' : 'Add Faculty'}
           </button>
         </motion.div>
       </form>

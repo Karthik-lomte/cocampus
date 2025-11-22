@@ -1,11 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, Download, Search, Trophy, Award, Medal,
   Calendar, User, X, FileText, Users, GraduationCap
 } from 'lucide-react';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AchievementsManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Achievements Data
+  const [achievements, setAchievements] = useState([]);
+
+  // UI States
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -21,89 +36,24 @@ function AchievementsManagement() {
     certificate: null
   });
 
-  // Mock achievements data
-  const [achievements] = useState([
-    // Student Achievements
-    {
-      id: 1,
-      type: 'student',
-      name: 'Aarav Sharma',
-      rollNoOrId: 'CSE21001',
-      class: 'CSE-3A',
-      category: 'Technical',
-      title: 'First Prize - National Hackathon 2024',
-      description: 'Won first prize in Smart India Hackathon for developing an AI-based solution',
-      date: '2024-03-15',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-03-20'
-    },
-    {
-      id: 2,
-      type: 'student',
-      name: 'Priya Patel',
-      rollNoOrId: 'CSE21025',
-      class: 'CSE-3A',
-      category: 'Sports',
-      title: 'Gold Medal - State Level Athletics',
-      description: 'Won gold medal in 400m race at State Level Athletics Championship',
-      date: '2024-02-10',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-02-15'
-    },
-    {
-      id: 3,
-      type: 'student',
-      name: 'Rahul Verma',
-      rollNoOrId: 'CSE21042',
-      class: 'CSE-3B',
-      category: 'Academic',
-      title: 'Research Paper Publication',
-      description: 'Published research paper in IEEE conference on Machine Learning',
-      date: '2024-01-25',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-01-28'
-    },
-    // Faculty Achievements
-    {
-      id: 4,
-      type: 'faculty',
-      name: 'Dr. Suresh Iyer',
-      rollNoOrId: 'FAC2024005',
-      department: 'Computer Science',
-      category: 'Research',
-      title: 'Best Research Award 2024',
-      description: 'Received Best Research Award from AICTE for work in Artificial Intelligence',
-      date: '2024-03-01',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-03-05'
-    },
-    {
-      id: 5,
-      type: 'faculty',
-      name: 'Prof. Meena Nair',
-      rollNoOrId: 'FAC2024008',
-      department: 'Computer Science',
-      category: 'Publication',
-      title: 'Research Paper in SCI Journal',
-      description: 'Published research paper in Q1 SCI Journal on Data Science',
-      date: '2024-02-20',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-02-25'
-    },
-    {
-      id: 6,
-      type: 'faculty',
-      name: 'Dr. Amit Desai',
-      rollNoOrId: 'FAC2024012',
-      department: 'Computer Science',
-      category: 'Award',
-      title: 'Best Faculty Award',
-      description: 'Received Best Faculty Award for academic year 2023-24',
-      date: '2024-01-15',
-      uploadedBy: 'Dr. Rajesh Kumar (HOD)',
-      uploadDate: '2024-01-18'
+  // Load Achievements
+  useEffect(() => {
+    loadAchievements();
+  }, []);
+
+  const loadAchievements = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getAchievements();
+      setAchievements(data.achievements || data || []);
+    } catch (err) {
+      console.error('Error loading achievements:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const studentCategories = ['Technical', 'Sports', 'Cultural', 'Academic', 'Other'];
   const facultyCategories = ['Research', 'Publication', 'Award', 'Training', 'Other'];
@@ -122,24 +72,61 @@ function AchievementsManagement() {
     return matchesSearch && matchesCategory && matchesType;
   });
 
-  const handleUploadSubmit = (e) => {
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    alert(`Achievement uploaded successfully for ${uploadData.name}!`);
-    setShowUploadModal(false);
-    setUploadData({
-      type: 'student',
-      name: '',
-      rollNoOrId: '',
-      category: '',
-      title: '',
-      description: '',
-      date: '',
-      certificate: null
-    });
+
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      formData.append('type', uploadData.type);
+      formData.append('name', uploadData.name);
+      formData.append('rollNoOrId', uploadData.rollNoOrId);
+      formData.append('category', uploadData.category);
+      formData.append('title', uploadData.title);
+      formData.append('description', uploadData.description);
+      formData.append('date', uploadData.date);
+      if (uploadData.certificate) {
+        formData.append('certificate', uploadData.certificate);
+      }
+
+      await hodService.uploadAchievement(formData);
+      toast.success(`Achievement uploaded successfully for ${uploadData.name}!`);
+      await loadAchievements();
+      setShowUploadModal(false);
+      setUploadData({
+        type: 'student',
+        name: '',
+        rollNoOrId: '',
+        category: '',
+        title: '',
+        description: '',
+        date: '',
+        certificate: null
+      });
+    } catch (err) {
+      console.error('Error uploading achievement:', err);
+      toast.error(err.response?.data?.message || 'Failed to upload achievement');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDownload = (achievement) => {
-    alert(`Downloading certificate for ${achievement.name} - ${achievement.title}`);
+  const handleDownload = async (achievement) => {
+    try {
+      const blob = await hodService.downloadAchievementCertificate(achievement.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${achievement.name}_${achievement.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Certificate downloaded successfully!');
+    } catch (err) {
+      console.error('Error downloading certificate:', err);
+      toast.error(err.response?.data?.message || 'Failed to download certificate');
+    }
   };
 
   const getCategoryIcon = (category) => {
@@ -174,6 +161,15 @@ function AchievementsManagement() {
 
   const studentAchievements = achievements.filter(a => a.type === 'student');
   const facultyAchievements = achievements.filter(a => a.type === 'faculty');
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading achievements..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadAchievements} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -589,15 +585,17 @@ function AchievementsManagement() {
                     <button
                       type="button"
                       onClick={() => setShowUploadModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Upload Achievement
+                      {submitting ? 'Uploading...' : 'Upload Achievement'}
                     </button>
                   </div>
                 </form>

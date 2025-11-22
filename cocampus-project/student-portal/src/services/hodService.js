@@ -34,6 +34,11 @@ export const hodService = {
     return response.data.data;
   },
 
+  createFaculty: async (facultyData) => {
+    const response = await api.post('/hod/faculty', facultyData);
+    return response.data.data;
+  },
+
   // Student Management
   getStudents: async (params = {}) => {
     const response = await api.get('/hod/students', { params });
@@ -144,6 +149,49 @@ export const hodService = {
     const response = await api.post('/hod/notices', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+    return response.data.data;
+  },
+
+  // Achievements
+  getAchievements: async (params = {}) => {
+    const response = await api.get('/hod/achievements', { params });
+    return response.data.data;
+  },
+
+  uploadAchievement: async (formData) => {
+    const response = await api.post('/hod/achievements', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  downloadAchievementCertificate: async (achievementId) => {
+    const response = await api.get(`/hod/achievements/${achievementId}/certificate`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  // Resources
+  getResources: async (params = {}) => {
+    const response = await api.get('/hod/resources', { params });
+    return response.data.data;
+  },
+
+  createResource: async (formData) => {
+    const response = await api.post('/hod/resources', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  updateResource: async (resourceId, resourceData) => {
+    const response = await api.put(`/hod/resources/${resourceId}`, resourceData);
+    return response.data.data;
+  },
+
+  deleteResource: async (resourceId) => {
+    const response = await api.delete(`/hod/resources/${resourceId}`);
     return response.data.data;
   }
 };
