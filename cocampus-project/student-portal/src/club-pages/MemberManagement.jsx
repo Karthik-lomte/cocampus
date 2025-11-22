@@ -1,9 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Users, Edit2, Trash2, X, UserPlus, Building2, Search } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function MemberManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [clubMembers, setClubMembers] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -20,8 +32,25 @@ function MemberManagement() {
     joiningDate: ''
   });
 
-  const clubMembers = clubData.clubMembers;
-  const departments = clubData.clubDepartments;
+  // Load Members
+  useEffect(() => {
+    loadMembers();
+  }, []);
+
+  const loadMembers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await clubService.getMembers();
+      setClubMembers(data.members || data || []);
+      setDepartments(data.departments || []);
+    } catch (err) {
+      console.error('Error loading members:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredMembers = clubMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -30,13 +59,23 @@ function MemberManagement() {
     return matchesSearch && matchesDepartment && member.status === 'active';
   });
 
-  const handleAddMember = (e) => {
+  const handleAddMember = async (e) => {
     e.preventDefault();
-    alert(`Member ${memberFormData.name} added successfully to ${memberFormData.department} department!`);
-    setShowAddMemberModal(false);
-    setMemberFormData({
-      name: '', rollNumber: '', department: '', role: '', year: '', email: '', phone: '', joiningDate: ''
-    });
+    try {
+      setSubmitting(true);
+      await clubService.addMember(memberFormData);
+      toast.success(`Member ${memberFormData.name} added successfully!`);
+      setShowAddMemberModal(false);
+      setMemberFormData({
+        name: '', rollNumber: '', department: '', role: '', year: '', email: '', phone: '', joiningDate: ''
+      });
+      await loadMembers();
+    } catch (err) {
+      console.error('Error adding member:', err);
+      toast.error(err.response?.data?.message || 'Failed to add member');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEditMember = (member) => {
@@ -54,25 +93,51 @@ function MemberManagement() {
     setShowEditMemberModal(true);
   };
 
-  const handleUpdateMember = (e) => {
+  const handleUpdateMember = async (e) => {
     e.preventDefault();
-    alert(`Member ${memberFormData.name} updated successfully!`);
-    setShowEditMemberModal(false);
-    setSelectedMember(null);
-    setMemberFormData({
-      name: '', rollNumber: '', department: '', role: '', year: '', email: '', phone: '', joiningDate: ''
-    });
+    try {
+      setSubmitting(true);
+      await clubService.updateMemberRole(selectedMember.id, memberFormData);
+      toast.success(`Member ${memberFormData.name} updated successfully!`);
+      setShowEditMemberModal(false);
+      setSelectedMember(null);
+      setMemberFormData({
+        name: '', rollNumber: '', department: '', role: '', year: '', email: '', phone: '', joiningDate: ''
+      });
+      await loadMembers();
+    } catch (err) {
+      console.error('Error updating member:', err);
+      toast.error(err.response?.data?.message || 'Failed to update member');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleRemoveMember = (member) => {
+  const handleRemoveMember = async (member) => {
     if (window.confirm(`Are you sure you want to remove ${member.name} from the club?`)) {
-      alert(`${member.name} has been removed from the club.`);
+      try {
+        await clubService.removeMember(member.id);
+        toast.success(`${member.name} has been removed from the club.`);
+        await loadMembers();
+      } catch (err) {
+        console.error('Error removing member:', err);
+        toast.error(err.response?.data?.message || 'Failed to remove member');
+      }
     }
   };
 
   const getDepartmentStats = (deptName) => {
     return clubMembers.filter(m => m.department === deptName && m.status === 'active').length;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading members..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadMembers} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

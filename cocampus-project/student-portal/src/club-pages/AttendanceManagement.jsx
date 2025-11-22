@@ -1,9 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Calendar, Users, CheckCircle, Clock, XCircle, X, User, Search } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AttendanceManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [attendanceRequests, setAttendanceRequests] = useState([]);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,6 +26,26 @@ function AttendanceManagement() {
     reason: ''
   });
   const [filter, setFilter] = useState('all');
+
+  // Load Attendance Requests
+  useEffect(() => {
+    loadAttendanceRequests();
+  }, []);
+
+  const loadAttendanceRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      // Using getActivities as a placeholder - would be a dedicated endpoint in production
+      const data = await clubService.getActivities({ type: 'attendance' });
+      setAttendanceRequests(data.attendanceRequests || data || []);
+    } catch (err) {
+      console.error('Error loading attendance requests:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Sample student data for selection
   const availableStudents = [
@@ -57,25 +88,37 @@ function AttendanceManagement() {
     }
   };
 
-  const handleSubmitRequest = (e) => {
+  const handleSubmitRequest = async (e) => {
     e.preventDefault();
     if (selectedStudents.length === 0) {
-      alert('Please select at least one student');
+      toast.error('Please select at least one student');
       return;
     }
     if (requestFormData.endDate && requestFormData.startDate > requestFormData.endDate) {
-      alert('End date must be after start date');
+      toast.error('End date must be after start date');
       return;
     }
-    const dateRange = requestFormData.endDate
-      ? `${new Date(requestFormData.startDate).toLocaleDateString()} to ${new Date(requestFormData.endDate).toLocaleDateString()}`
-      : new Date(requestFormData.startDate).toLocaleDateString();
-    alert(`Attendance request submitted for ${selectedStudents.length} students (${dateRange}) to Principal!`);
-    setShowRequestModal(false);
-    setSelectedStudents([]);
-    setSearchTerm('');
-    setDepartmentFilter('all');
-    setRequestFormData({ eventName: '', startDate: '', endDate: '', reason: '' });
+
+    try {
+      setSubmitting(true);
+      await clubService.createActivity({
+        ...requestFormData,
+        type: 'attendance',
+        selectedStudents
+      });
+      toast.success(`Attendance request submitted for ${selectedStudents.length} students to Principal!`);
+      setShowRequestModal(false);
+      setSelectedStudents([]);
+      setSearchTerm('');
+      setDepartmentFilter('all');
+      setRequestFormData({ eventName: '', startDate: '', endDate: '', reason: '' });
+      await loadAttendanceRequests();
+    } catch (err) {
+      console.error('Error submitting attendance request:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit attendance request');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSelectAll = () => {
@@ -96,6 +139,15 @@ function AttendanceManagement() {
       {status.toUpperCase()}
     </span>;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading attendance management..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadAttendanceRequests} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

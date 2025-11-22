@@ -1,9 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Calendar, Users, Eye, Download, Upload, X, FileText, Clock, CheckCircle, ImageIcon } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function EventManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [events, setEvents] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showParticipants, setShowParticipants] = useState(false);
@@ -38,25 +49,52 @@ function EventManagement() {
     additionalDoc: null
   });
 
-  const eventRequests = clubData.eventRequests;
+  // Load Events
+  useEffect(() => {
+    loadEvents();
+  }, []);
 
-  const filteredEvents = eventRequests.filter(event => {
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await clubService.getEvents();
+      setEvents(data.events || data || []);
+    } catch (err) {
+      console.error('Error loading events:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredEvents = events.filter(event => {
     if (filter === 'all') return true;
     return event.status === filter;
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert('Event request submitted successfully to Principal!');
-    setShowCreateForm(false);
-    setFormData({
-      academicYear: '', quarter: '', programType: '', programTheme: '',
-      activityName: '', drivenBy: '', otherProgramType: '', duration: '',
-      startDate: '', endDate: '', studentParticipants: '', facultyParticipants: '',
-      externalParticipants: '', expenditure: '', remark: '', modeOfDelivery: '',
-      activityLedBy: '', objective: '', benefit: '', videoUrl: '',
-      photograph1: null, photograph2: null, reportPdf: null, additionalDoc: null
-    });
+    try {
+      setSubmitting(true);
+      await clubService.createEvent(formData);
+      toast.success('Event request submitted successfully to Principal!');
+      setShowCreateForm(false);
+      setFormData({
+        academicYear: '', quarter: '', programType: '', programTheme: '',
+        activityName: '', drivenBy: '', otherProgramType: '', duration: '',
+        startDate: '', endDate: '', studentParticipants: '', facultyParticipants: '',
+        externalParticipants: '', expenditure: '', remark: '', modeOfDelivery: '',
+        activityLedBy: '', objective: '', benefit: '', videoUrl: '',
+        photograph1: null, photograph2: null, reportPdf: null, additionalDoc: null
+      });
+      await loadEvents();
+    } catch (err) {
+      console.error('Error creating event:', err);
+      toast.error(err.response?.data?.message || 'Failed to create event');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleViewParticipants = (event) => {
@@ -101,6 +139,15 @@ function EventManagement() {
       {status.toUpperCase()}
     </span>;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading events..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadEvents} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
