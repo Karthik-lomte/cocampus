@@ -1,12 +1,68 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, GraduationCap, TrendingUp, DollarSign,
   Building2, Award, FileText, Calendar
 } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function PrincipalDashboard() {
-  const { institutionStats, departments, recentActivities } = principalData;
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Dashboard Data
+  const [profile, setProfile] = useState({});
+  const [institutionStats, setInstitutionStats] = useState({
+    totalStudents: 0,
+    totalFaculty: 0,
+    passPercentage: 0,
+    totalDepartments: 0
+  });
+  const [departments, setDepartments] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
+
+  // Load Dashboard Data
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getDashboard();
+
+      setProfile(data.profile || {});
+      setInstitutionStats(data.institutionStats || {
+        totalStudents: 0,
+        totalFaculty: 0,
+        passPercentage: 0,
+        totalDepartments: 0
+      });
+      setDepartments(data.departments || []);
+      setRecentActivities(data.recentActivities || []);
+    } catch (err) {
+      console.error('Error loading principal dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading principal dashboard..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -17,9 +73,9 @@ function PrincipalDashboard() {
         className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-2xl p-8 text-white shadow-xl"
       >
         <h1 className="text-3xl md:text-4xl font-bold mb-2">
-          Welcome, {principalData.profile.name}
+          Welcome, {profile?.name || 'Principal'}
         </h1>
-        <p className="text-purple-100 text-lg">{principalData.profile.institution}</p>
+        <p className="text-purple-100 text-lg">{profile?.institution || ''}</p>
       </motion.div>
 
       {/* Institution Stats */}
