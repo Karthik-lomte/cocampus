@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -15,8 +15,17 @@ import {
   PieChart,
   X
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const ReportsAnalytics = () => {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reportsData, setReportsData] = useState(null);
+
   const [filters, setFilters] = useState({
     department: 'all',
     semester: 'all',
@@ -24,50 +33,39 @@ const ReportsAnalytics = () => {
     dateTo: ''
   });
 
-  const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology'];
-  const semesters = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  useEffect(() => {
+    loadReportsData();
+  }, [filters]);
 
-  // Student Performance Data
-  const performanceData = [
-    { department: 'Computer Science', passed: 92, failed: 8, avgScore: 78, topScore: 98 },
-    { department: 'Electronics', passed: 88, failed: 12, avgScore: 74, topScore: 95 },
-    { department: 'Mechanical', passed: 85, failed: 15, avgScore: 72, topScore: 94 },
-    { department: 'Civil', passed: 87, failed: 13, avgScore: 73, topScore: 92 },
-    { department: 'Information Technology', passed: 90, failed: 10, avgScore: 76, topScore: 96 }
-  ];
-
-  // Fee Collection Data
-  const feeData = {
-    totalExpected: 28500000,
-    totalCollected: 24850000,
-    pending: 3650000,
-    collectionRate: 87,
-    departmentWise: [
-      { department: 'Computer Science', collected: 6200000, pending: 800000 },
-      { department: 'Electronics', collected: 4800000, pending: 700000 },
-      { department: 'Mechanical', collected: 4500000, pending: 650000 },
-      { department: 'Civil', collected: 4350000, pending: 750000 },
-      { department: 'Information Technology', collected: 5000000, pending: 750000 }
-    ]
+  const loadReportsData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getReports(filters);
+      setReportsData(data);
+    } catch (err) {
+      console.error('Reports error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Attendance Data
-  const attendanceData = [
-    { department: 'Computer Science', overall: 85, theory: 88, practical: 82 },
-    { department: 'Electronics', overall: 82, theory: 85, practical: 79 },
-    { department: 'Mechanical', overall: 78, theory: 80, practical: 76 },
-    { department: 'Civil', overall: 80, theory: 83, practical: 77 },
-    { department: 'Information Technology', overall: 84, theory: 86, practical: 82 }
-  ];
+  if (loading) return <Loading fullScreen message="Loading reports and analytics..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadReportsData} fullScreen />;
 
-  // Faculty Workload Data
-  const facultyWorkload = [
-    { department: 'Computer Science', faculty: 45, avgHours: 18, totalClasses: 320, avgStudents: 42 },
-    { department: 'Electronics', faculty: 32, avgHours: 20, totalClasses: 256, avgStudents: 38 },
-    { department: 'Mechanical', faculty: 30, avgHours: 19, totalClasses: 240, avgStudents: 40 },
-    { department: 'Civil', faculty: 25, avgHours: 21, totalClasses: 200, avgStudents: 36 },
-    { department: 'Information Technology', faculty: 28, avgHours: 19, totalClasses: 224, avgStudents: 41 }
-  ];
+  const departments = reportsData?.departments || [];
+  const semesters = reportsData?.semesters || ['1', '2', '3', '4', '5', '6', '7', '8'];
+  const performanceData = reportsData?.performanceData || [];
+  const feeData = reportsData?.feeData || {
+    totalExpected: 0,
+    totalCollected: 0,
+    pending: 0,
+    collectionRate: 0,
+    departmentWise: []
+  };
+  const attendanceData = reportsData?.attendanceData || [];
+  const facultyWorkload = reportsData?.facultyWorkload || [];
 
   // Check if any filter is active
   const isFiltered = useMemo(() => {

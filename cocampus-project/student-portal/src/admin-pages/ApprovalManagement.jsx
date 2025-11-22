@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle,
@@ -15,41 +15,51 @@ import {
   AlertTriangle,
   Check
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const ApprovalManagement = () => {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('leave');
   const [showRemarksModal, setShowRemarksModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [remarks, setRemarks] = useState('');
   const [actionType, setActionType] = useState('');
+  const [processing, setProcessing] = useState(false);
 
-  const [leaveRequests, setLeaveRequests] = useState([
-    { id: 1, name: 'Dr. Priya Sharma', designation: 'Professor', department: 'Computer Science', leaveType: 'Casual Leave', fromDate: '2024-01-15', toDate: '2024-01-17', days: 3, reason: 'Personal work', status: 'pending', appliedOn: '2024-01-10' },
-    { id: 2, name: 'Dr. Amit Kumar', designation: 'Associate Professor', department: 'Electronics', leaveType: 'Medical Leave', fromDate: '2024-01-20', toDate: '2024-01-25', days: 6, reason: 'Medical treatment', status: 'pending', appliedOn: '2024-01-12' },
-    { id: 3, name: 'Prof. Neha Gupta', designation: 'Assistant Professor', department: 'Mechanical', leaveType: 'Earned Leave', fromDate: '2024-01-22', toDate: '2024-01-26', days: 5, reason: 'Family function', status: 'approved', appliedOn: '2024-01-08', remarks: 'Approved as requested' },
-    { id: 4, name: 'Dr. Rajesh Verma', designation: 'Professor', department: 'Civil', leaveType: 'Casual Leave', fromDate: '2024-01-18', toDate: '2024-01-19', days: 2, reason: 'Emergency work', status: 'pending', appliedOn: '2024-01-14' }
-  ]);
-
-  const [certificateRequests, setCertificateRequests] = useState([
-    { id: 1, studentName: 'Rahul Sharma', studentId: 'STU2022001', department: 'Computer Science', certificateType: 'Bonafide Certificate', purpose: 'Bank loan application', status: 'pending', appliedOn: '2024-01-10', priority: 'high' },
-    { id: 2, studentName: 'Priya Patel', studentId: 'STU2022045', department: 'Electronics', certificateType: 'Character Certificate', purpose: 'Job application', status: 'pending', appliedOn: '2024-01-11', priority: 'medium' },
-    { id: 3, studentName: 'Amit Singh', studentId: 'STU2021089', department: 'Mechanical', certificateType: 'Course Completion', purpose: 'Higher studies', status: 'processing', appliedOn: '2024-01-08', priority: 'high' },
-    { id: 4, studentName: 'Neha Gupta', studentId: 'STU2022112', department: 'Civil', certificateType: 'Bonafide Certificate', purpose: 'Passport application', status: 'completed', appliedOn: '2024-01-05', priority: 'low' },
-    { id: 5, studentName: 'Vikram Kumar', studentId: 'STU2023034', department: 'IT', certificateType: 'Migration Certificate', purpose: 'University transfer', status: 'pending', appliedOn: '2024-01-12', priority: 'high' }
-  ]);
-
-  const [sportsBookings, setSportsBookings] = useState([
-    { id: 1, guestName: 'Mr. Rajesh Kumar', phone: '+91 9876543210', facility: 'Tennis Court', date: '2024-01-20', timeSlot: '6:00 AM - 8:00 AM', guests: 4, purpose: 'Morning practice', status: 'pending', appliedOn: '2024-01-14' },
-    { id: 2, guestName: 'Mrs. Sunita Devi', phone: '+91 9876543211', facility: 'Swimming Pool', date: '2024-01-21', timeSlot: '7:00 AM - 9:00 AM', guests: 2, purpose: 'Swimming lessons', status: 'pending', appliedOn: '2024-01-13' },
-    { id: 3, guestName: 'Dr. Arun Sharma', phone: '+91 9876543212', facility: 'Basketball Court', date: '2024-01-19', timeSlot: '5:00 PM - 7:00 PM', guests: 10, purpose: 'Friendly match', status: 'approved', appliedOn: '2024-01-10', remarks: 'Approved for weekend use' },
-    { id: 4, guestName: 'Mr. Vijay Singh', phone: '+91 9876543213', facility: 'Badminton Court', date: '2024-01-22', timeSlot: '6:00 PM - 8:00 PM', guests: 4, purpose: 'Practice session', status: 'pending', appliedOn: '2024-01-15' }
-  ]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [certificateRequests, setCertificateRequests] = useState([]);
+  const [sportsBookings, setSportsBookings] = useState([]);
 
   const tabs = [
     { id: 'leave', label: 'Leave Requests', icon: FileText, color: 'blue' },
     { id: 'certificate', label: 'Certificate Requests', icon: Award, color: 'purple' },
     { id: 'sports', label: 'Sports Bookings', icon: Trophy, color: 'green' }
   ];
+
+  useEffect(() => {
+    loadApprovals();
+  }, []);
+
+  const loadApprovals = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getPendingApprovals();
+      setLeaveRequests(data.leaveRequests || data.leave || []);
+      setCertificateRequests(data.certificateRequests || data.certificates || []);
+      setSportsBookings(data.sportsBookings || data.sports || []);
+    } catch (err) {
+      console.error('Approvals error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const pendingLeave = leaveRequests.filter(r => r.status === 'pending').length;
   const pendingCertificates = certificateRequests.filter(r => r.status === 'pending').length;
@@ -62,35 +72,58 @@ const ApprovalManagement = () => {
     setShowRemarksModal(true);
   };
 
-  const handleLeaveAction = () => {
-    setLeaveRequests(leaveRequests.map(request =>
-      request.id === selectedItem.id
-        ? { ...request, status: actionType === 'approve' ? 'approved' : 'rejected', remarks }
-        : request
-    ));
-    setShowRemarksModal(false);
-    setSelectedItem(null);
-    alert(`Leave request ${actionType === 'approve' ? 'approved' : 'rejected'} successfully!`);
+  const handleLeaveAction = async () => {
+    try {
+      setProcessing(true);
+      if (actionType === 'approve') {
+        await adminService.approveLeave(selectedItem.id, remarks);
+        toast.success('Leave request approved successfully!');
+      } else {
+        await adminService.rejectLeave(selectedItem.id, remarks);
+        toast.success('Leave request rejected successfully!');
+      }
+      await loadApprovals();
+      setShowRemarksModal(false);
+      setSelectedItem(null);
+    } catch (err) {
+      console.error('Leave action error:', err);
+      toast.error(err.response?.data?.message || 'Failed to process leave request');
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const handleCertificateAction = (id, action) => {
-    setCertificateRequests(certificateRequests.map(request =>
-      request.id === id
-        ? { ...request, status: action === 'process' ? 'processing' : action === 'complete' ? 'completed' : 'rejected' }
-        : request
-    ));
-    alert(`Certificate request ${action === 'process' ? 'marked as processing' : action === 'complete' ? 'completed' : 'rejected'}!`);
+  const handleCertificateAction = async (id, action) => {
+    try {
+      const status = action === 'process' ? 'processing' : action === 'complete' ? 'completed' : 'rejected';
+      await adminService.updateCertificateStatus(id, status);
+      toast.success(`Certificate request ${action === 'process' ? 'marked as processing' : action === 'complete' ? 'completed' : 'rejected'}!`);
+      await loadApprovals();
+    } catch (err) {
+      console.error('Certificate action error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update certificate request');
+    }
   };
 
-  const handleSportsAction = () => {
-    setSportsBookings(sportsBookings.map(booking =>
-      booking.id === selectedItem.id
-        ? { ...booking, status: actionType === 'approve' ? 'approved' : 'rejected', remarks }
-        : booking
-    ));
-    setShowRemarksModal(false);
-    setSelectedItem(null);
-    alert(`Sports booking ${actionType === 'approve' ? 'approved' : 'rejected'} successfully!`);
+  const handleSportsAction = async () => {
+    try {
+      setProcessing(true);
+      if (actionType === 'approve') {
+        await adminService.approveSportsBooking(selectedItem.id, remarks);
+        toast.success('Sports booking approved successfully!');
+      } else {
+        await adminService.rejectSportsBooking(selectedItem.id, remarks);
+        toast.success('Sports booking rejected successfully!');
+      }
+      await loadApprovals();
+      setShowRemarksModal(false);
+      setSelectedItem(null);
+    } catch (err) {
+      console.error('Sports action error:', err);
+      toast.error(err.response?.data?.message || 'Failed to process sports booking');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -112,6 +145,9 @@ const ApprovalManagement = () => {
     };
     return styles[priority] || 'bg-gray-100 text-gray-700';
   };
+
+  if (loading) return <Loading fullScreen message="Loading approval requests..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadApprovals} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -516,19 +552,21 @@ const ApprovalManagement = () => {
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => setShowRemarksModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={processing}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={activeTab === 'leave' ? handleLeaveAction : handleSportsAction}
-                    className={`px-4 py-2 text-white rounded-lg transition-colors ${
+                    disabled={processing}
+                    className={`px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       actionType === 'approve'
                         ? 'bg-green-600 hover:bg-green-700'
                         : 'bg-red-600 hover:bg-red-700'
                     }`}
                   >
-                    {actionType === 'approve' ? 'Approve' : 'Reject'}
+                    {processing ? 'Processing...' : actionType === 'approve' ? 'Approve' : 'Reject'}
                   </button>
                 </div>
               </div>

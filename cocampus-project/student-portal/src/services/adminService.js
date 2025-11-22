@@ -132,6 +132,31 @@ export const adminService = {
     return response.data.data;
   },
 
+  approveLeave: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/leave/${id}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectLeave: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/leave/${id}/reject`, { remarks });
+    return response.data.data;
+  },
+
+  updateCertificateStatus: async (id, status) => {
+    const response = await api.put(`/admin/approvals/certificate/${id}`, { status });
+    return response.data.data;
+  },
+
+  approveSportsBooking: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/sports/${id}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectSportsBooking: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/sports/${id}/reject`, { remarks });
+    return response.data.data;
+  },
+
   // Notice Management
   getNotices: async () => {
     const response = await api.get('/admin/notices');

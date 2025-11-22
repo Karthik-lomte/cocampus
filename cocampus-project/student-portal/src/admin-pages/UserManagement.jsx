@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -22,16 +22,17 @@ import {
   FileSpreadsheet,
   RefreshCw
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState([
-    { id: 1, name: 'Rahul Sharma', email: 'rahul@university.edu', phone: '+91 9876543210', role: 'student', department: 'Computer Science', status: 'active', userId: 'STU2022001', address: '123 Main St, Delhi', dob: '2002-05-15', guardian: 'Mr. Sharma', guardianPhone: '+91 9876543200' },
-    { id: 2, name: 'Dr. Priya Patel', email: 'priya@university.edu', phone: '+91 9876543211', role: 'faculty', department: 'Computer Science', status: 'active', userId: 'FAC2020015', address: '456 Park Ave, Mumbai', dob: '1985-03-20', qualification: 'Ph.D', specialization: 'AI/ML' },
-    { id: 3, name: 'Dr. Amit Kumar', email: 'amit@university.edu', phone: '+91 9876543212', role: 'hod', department: 'Electronics', status: 'active', userId: 'HOD2018005', address: '789 Oak St, Bangalore', dob: '1980-07-10', qualification: 'Ph.D', specialization: 'VLSI' },
-    { id: 4, name: 'Dr. Neha Gupta', email: 'neha@university.edu', phone: '+91 9876543213', role: 'principal', department: 'Administration', status: 'active', userId: 'PRI2015001', address: '321 Elm St, Chennai', dob: '1975-11-25', qualification: 'Ph.D', specialization: 'Management' },
-    { id: 5, name: 'Mr. Vikram Singh', email: 'vikram@university.edu', phone: '+91 9876543214', role: 'warden', department: 'Hostel', status: 'active', userId: 'WRD2019003', address: '654 Pine St, Hyderabad', dob: '1988-09-30', assignedBlock: 'Block A' },
-    { id: 6, name: 'Mrs. Sunita Devi', email: 'sunita@university.edu', phone: '+91 9876543215', role: 'canteen', department: 'Canteen', status: 'active', userId: 'CAN2020001', address: '987 Cedar St, Pune', dob: '1990-12-05', assignedCanteen: 'Main Canteen' }
-  ]);
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [users, setUsers] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -40,6 +41,7 @@ const UserManagement = () => {
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [bulkUploadFile, setBulkUploadFile] = useState(null);
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '', role: '', department: '', password: ''
   });
@@ -60,10 +62,32 @@ const UserManagement = () => {
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology', 'Administration', 'Hostel', 'Canteen'];
 
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = {};
+      if (roleFilter !== 'all') {
+        params.role = roleFilter;
+      }
+      const data = await adminService.getUsers(params);
+      setUsers(data.users || data || []);
+    } catch (err) {
+      console.error('Users error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          user.userId.toLowerCase().includes(searchTerm.toLowerCase());
+                          (user.userId && user.userId.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -73,31 +97,65 @@ const UserManagement = () => {
     return `${prefixes[role]}${new Date().getFullYear()}${String(users.length + 1).padStart(3, '0')}`;
   };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
-    const newUser = {
-      id: users.length + 1,
-      ...formData,
-      userId: generateUserId(formData.role),
-      status: 'active'
-    };
-    setUsers([...users, newUser]);
-    setShowAddModal(false);
-    setFormData({ name: '', email: '', phone: '', role: '', department: '', password: '' });
-    alert(`User added successfully!\n\nUser ID: ${newUser.userId}\nEmail: ${newUser.email}\nPassword: ${formData.password}`);
+    try {
+      setSubmitting(true);
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        role: formData.role,
+        department: formData.department,
+        password: formData.password
+      };
+      const newUser = await adminService.createUser(userData);
+      toast.success(`User added successfully! User ID: ${newUser.userId || 'Generated'}`);
+      await loadUsers();
+      setShowAddModal(false);
+      setFormData({ name: '', email: '', phone: '', role: '', department: '', password: '' });
+    } catch (err) {
+      console.error('Add user error:', err);
+      toast.error(err.response?.data?.message || 'Failed to add user');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditUser = (e) => {
+  const handleEditUser = async (e) => {
     e.preventDefault();
-    setUsers(users.map(user => user.id === selectedUser.id ? { ...user, ...formData } : user));
-    setShowEditModal(false);
-    setSelectedUser(null);
-    alert('User updated successfully!');
+    try {
+      setSubmitting(true);
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        role: formData.role,
+        department: formData.department
+      };
+      await adminService.updateUser(selectedUser.id, userData);
+      toast.success('User updated successfully!');
+      await loadUsers();
+      setShowEditModal(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error('Update user error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update user');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteUser = (userId) => {
+  const handleDeleteUser = async (userId) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(user => user.id !== userId));
+      try {
+        await adminService.deleteUser(userId);
+        toast.success('User deleted successfully!');
+        await loadUsers();
+      } catch (err) {
+        console.error('Delete user error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete user');
+      }
     }
   };
 
@@ -111,7 +169,7 @@ const UserManagement = () => {
     setShowPasswordResetModal(true);
   };
 
-  const handlePasswordReset = (e) => {
+  const handlePasswordReset = async (e) => {
     e.preventDefault();
     let newPassword = passwordResetData.newPassword;
 
@@ -119,24 +177,51 @@ const UserManagement = () => {
       newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
     } else {
       if (passwordResetData.newPassword !== passwordResetData.confirmPassword) {
-        alert('Passwords do not match!');
+        toast.error('Passwords do not match!');
         return;
       }
       if (passwordResetData.newPassword.length < 8) {
-        alert('Password must be at least 8 characters!');
+        toast.error('Password must be at least 8 characters!');
         return;
       }
     }
 
-    alert(`Password reset successful for ${selectedUser.name}!\n\nNew Password: ${newPassword}\n\nPlease share this password securely with the user.`);
-    setShowPasswordResetModal(false);
-    setSelectedUser(null);
+    try {
+      setSubmitting(true);
+      await adminService.resetPassword(selectedUser.id, newPassword);
+      toast.success(`Password reset successful for ${selectedUser.name}! New Password: ${newPassword}`, { duration: 8000 });
+      setShowPasswordResetModal(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error('Password reset error:', err);
+      toast.error(err.response?.data?.message || 'Failed to reset password');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleBulkUpload = (e) => {
+  const handleBulkUpload = async (e) => {
     e.preventDefault();
-    alert('Bulk upload functionality - CSV file will be processed and students will be added to the system.\n\nNote: This is a demo. In production, this would parse the uploaded file and create user accounts.');
-    setShowBulkUploadModal(false);
+    if (!bulkUploadFile) {
+      toast.error('Please select a CSV file to upload');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      formData.append('file', bulkUploadFile);
+      const result = await adminService.bulkUploadUsers(formData);
+      toast.success(`Bulk upload successful! ${result.count || 'Multiple'} users added.`);
+      await loadUsers();
+      setShowBulkUploadModal(false);
+      setBulkUploadFile(null);
+    } catch (err) {
+      console.error('Bulk upload error:', err);
+      toast.error(err.response?.data?.message || 'Failed to upload users');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const downloadTemplate = () => {
@@ -165,6 +250,9 @@ const UserManagement = () => {
     const colors = { student: 'blue', faculty: 'green', hod: 'amber', principal: 'purple', warden: 'orange', canteen: 'red' };
     return colors[role] || 'gray';
   };
+
+  if (loading) return <Loading fullScreen message="Loading user management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadUsers} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -404,15 +492,17 @@ const UserManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add User
+                    {submitting ? 'Adding...' : 'Add User'}
                   </button>
                 </div>
               </form>
@@ -507,15 +597,17 @@ const UserManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
@@ -577,7 +669,11 @@ const UserManagement = () => {
                       required
                       className="hidden"
                       id="csvUpload"
+                      onChange={(e) => setBulkUploadFile(e.target.files[0])}
                     />
+                    {bulkUploadFile && (
+                      <p className="mt-2 text-sm text-gray-600">Selected: {bulkUploadFile.name}</p>
+                    )}
                     <label
                       htmlFor="csvUpload"
                       className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg cursor-pointer hover:bg-indigo-200 transition-colors"
@@ -597,15 +693,17 @@ const UserManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowBulkUploadModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Upload & Process
+                    {submitting ? 'Uploading...' : 'Upload & Process'}
                   </button>
                 </div>
               </form>
@@ -731,15 +829,17 @@ const UserManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowPasswordResetModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Reset Password
+                    {submitting ? 'Resetting...' : 'Reset Password'}
                   </button>
                 </div>
               </form>
