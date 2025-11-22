@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -23,8 +23,19 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const AcademicManagement = () => {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [activeTab, setActiveTab] = useState('semesters');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -41,33 +52,16 @@ const AcademicManagement = () => {
   const [isUploading, setIsUploading] = useState(false);
 
   // Semesters State
-  const [semesters, setSemesters] = useState([
-    { id: 1, academicYear: '2024-25', semester: 'Odd', startDate: '2024-07-15', endDate: '2024-12-15', status: 'active' },
-    { id: 2, academicYear: '2024-25', semester: 'Even', startDate: '2025-01-10', endDate: '2025-05-30', status: 'upcoming' },
-    { id: 3, academicYear: '2023-24', semester: 'Even', startDate: '2024-01-10', endDate: '2024-05-30', status: 'completed' },
-    { id: 4, academicYear: '2023-24', semester: 'Odd', startDate: '2023-07-15', endDate: '2023-12-15', status: 'completed' }
-  ]);
+  const [semesters, setSemesters] = useState([]);
 
   // Calendar Events State
-  const [events, setEvents] = useState([
-    { id: 1, title: 'Mid-Semester Exams', date: '2024-09-15', endDate: '2024-09-25', type: 'exam', description: 'Mid-semester examinations for all departments' },
-    { id: 2, title: 'Diwali Vacation', date: '2024-10-28', endDate: '2024-11-05', type: 'holiday', description: 'Diwali festival holidays' },
-    { id: 3, title: 'Sports Day', date: '2024-11-15', endDate: '2024-11-15', type: 'academic', description: 'Annual sports day event' },
-    { id: 4, title: 'End Semester Exams', date: '2024-12-01', endDate: '2024-12-15', type: 'exam', description: 'End semester examinations' },
-    { id: 5, title: 'Winter Vacation', date: '2024-12-20', endDate: '2025-01-05', type: 'holiday', description: 'Winter break' }
-  ]);
+  const [events, setEvents] = useState([]);
 
   // External Marks State
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [studentMarks, setStudentMarks] = useState([
-    { id: 1, rollNo: 'CSE2022001', name: 'Rahul Sharma', internal: 35, external: '', total: '' },
-    { id: 2, rollNo: 'CSE2022002', name: 'Priya Patel', internal: 38, external: '', total: '' },
-    { id: 3, rollNo: 'CSE2022003', name: 'Amit Kumar', internal: 32, external: '', total: '' },
-    { id: 4, rollNo: 'CSE2022004', name: 'Neha Gupta', internal: 40, external: '', total: '' },
-    { id: 5, rollNo: 'CSE2022005', name: 'Vikram Singh', internal: 28, external: '', total: '' }
-  ]);
+  const [studentMarks, setStudentMarks] = useState([]);
 
   // Modals State
   const [showSemesterModal, setShowSemesterModal] = useState(false);
@@ -94,6 +88,50 @@ const AcademicManagement = () => {
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Load Data from Backend
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [semestersData, calendarData] = await Promise.all([
+        adminService.getSemesters(),
+        adminService.getAcademicCalendar()
+      ]);
+      setSemesters(semestersData.semesters || semestersData || []);
+      setEvents(calendarData.events || calendarData || []);
+    } catch (err) {
+      console.error('Error loading academic data:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load student marks when department/semester/subject changes
+  useEffect(() => {
+    if (selectedDepartment && selectedSemester && selectedSubject) {
+      loadStudentMarks();
+    }
+  }, [selectedDepartment, selectedSemester, selectedSubject]);
+
+  const loadStudentMarks = async () => {
+    try {
+      const marksData = await adminService.getStudentMarks({
+        department: selectedDepartment,
+        semester: selectedSemester,
+        subject: selectedSubject
+      });
+      setStudentMarks(marksData.students || marksData || []);
+    } catch (err) {
+      console.error('Error loading student marks:', err);
+      toast.error(err.response?.data?.message || 'Failed to load student marks');
+    }
+  };
 
   // Google Calendar Sync Function
   const handleGoogleCalendarSync = async () => {
@@ -153,19 +191,27 @@ const AcademicManagement = () => {
   };
 
   // Semester Functions
-  const handleAddSemester = (e) => {
+  const handleAddSemester = async (e) => {
     e.preventDefault();
-    if (editingSemester) {
-      setSemesters(semesters.map(s => s.id === editingSemester.id ? { ...s, ...semesterForm } : s));
-      alert('Semester updated successfully!');
-    } else {
-      const newSemester = { id: semesters.length + 1, ...semesterForm };
-      setSemesters([...semesters, newSemester]);
-      alert('Semester added successfully!');
+    try {
+      setSubmitting(true);
+      if (editingSemester) {
+        await adminService.updateSemester(editingSemester.id, semesterForm);
+        toast.success('Semester updated successfully!');
+      } else {
+        await adminService.createSemester(semesterForm);
+        toast.success('Semester added successfully!');
+      }
+      await loadData();
+      setShowSemesterModal(false);
+      setEditingSemester(null);
+      setSemesterForm({ academicYear: '', semester: '', startDate: '', endDate: '', status: 'upcoming' });
+    } catch (err) {
+      console.error('Error saving semester:', err);
+      toast.error(err.response?.data?.message || 'Failed to save semester');
+    } finally {
+      setSubmitting(false);
     }
-    setShowSemesterModal(false);
-    setEditingSemester(null);
-    setSemesterForm({ academicYear: '', semester: '', startDate: '', endDate: '', status: 'upcoming' });
   };
 
   const openEditSemester = (semester) => {
@@ -174,26 +220,41 @@ const AcademicManagement = () => {
     setShowSemesterModal(true);
   };
 
-  const deleteSemester = (id) => {
+  const deleteSemester = async (id) => {
     if (window.confirm('Are you sure you want to delete this semester?')) {
-      setSemesters(semesters.filter(s => s.id !== id));
+      try {
+        await adminService.deleteSemester(id);
+        toast.success('Semester deleted successfully!');
+        await loadData();
+      } catch (err) {
+        console.error('Error deleting semester:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete semester');
+      }
     }
   };
 
   // Event Functions
-  const handleAddEvent = (e) => {
+  const handleAddEvent = async (e) => {
     e.preventDefault();
-    if (editingEvent) {
-      setEvents(events.map(ev => ev.id === editingEvent.id ? { ...ev, ...eventForm } : ev));
-      alert('Event updated successfully!');
-    } else {
-      const newEvent = { id: events.length + 1, ...eventForm };
-      setEvents([...events, newEvent]);
-      alert('Event added successfully!');
+    try {
+      setSubmitting(true);
+      if (editingEvent) {
+        await adminService.updateAcademicEvent(editingEvent.id, eventForm);
+        toast.success('Event updated successfully!');
+      } else {
+        await adminService.createAcademicEvent(eventForm);
+        toast.success('Event added successfully!');
+      }
+      await loadData();
+      setShowEventModal(false);
+      setEditingEvent(null);
+      setEventForm({ title: '', date: '', endDate: '', type: 'academic', description: '' });
+    } catch (err) {
+      console.error('Error saving event:', err);
+      toast.error(err.response?.data?.message || 'Failed to save event');
+    } finally {
+      setSubmitting(false);
     }
-    setShowEventModal(false);
-    setEditingEvent(null);
-    setEventForm({ title: '', date: '', endDate: '', type: 'academic', description: '' });
   };
 
   const openEditEvent = (event) => {
@@ -202,9 +263,16 @@ const AcademicManagement = () => {
     setShowEventModal(true);
   };
 
-  const deleteEvent = (id) => {
+  const deleteEvent = async (id) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      setEvents(events.filter(ev => ev.id !== id));
+      try {
+        await adminService.deleteAcademicEvent(id);
+        toast.success('Event deleted successfully!');
+        await loadData();
+      } catch (err) {
+        console.error('Error deleting event:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete event');
+      }
     }
   };
 
@@ -219,17 +287,31 @@ const AcademicManagement = () => {
     }));
   };
 
-  const handleSaveMarks = () => {
+  const handleSaveMarks = async () => {
     if (!selectedDepartment || !selectedSemester || !selectedSubject) {
-      alert('Please select department, semester, and subject first!');
+      toast.error('Please select department, semester, and subject first!');
       return;
     }
     const unmarkedStudents = studentMarks.filter(s => s.external === '');
     if (unmarkedStudents.length > 0) {
-      alert('Please enter marks for all students!');
+      toast.error('Please enter marks for all students!');
       return;
     }
-    alert('Marks saved successfully!');
+    try {
+      setSubmitting(true);
+      await adminService.saveExternalMarks({
+        department: selectedDepartment,
+        semester: selectedSemester,
+        subject: selectedSubject,
+        marks: studentMarks
+      });
+      toast.success('Marks saved successfully!');
+    } catch (err) {
+      console.error('Error saving marks:', err);
+      toast.error(err.response?.data?.message || 'Failed to save marks');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Bulk Upload Functions
@@ -257,28 +339,36 @@ CSE2022005,Vikram Singh,28,`;
     }
   };
 
-  const handleBulkUploadSubmit = () => {
+  const handleBulkUploadSubmit = async () => {
     if (!bulkUploadFile) {
-      alert('Please select a file to upload!');
+      toast.error('Please select a file to upload!');
       return;
     }
 
-    setIsUploading(true);
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', bulkUploadFile);
+      formData.append('department', selectedDepartment);
+      formData.append('semester', selectedSemester);
+      formData.append('subject', selectedSubject);
 
-    // Mock file processing
-    setTimeout(() => {
-      // Mock updating marks from CSV
-      setStudentMarks(studentMarks.map(s => ({
-        ...s,
-        external: Math.floor(Math.random() * 30) + 30, // Random marks between 30-60
-        total: s.internal + Math.floor(Math.random() * 30) + 30
-      })));
+      const result = await adminService.bulkUploadMarks(formData);
 
-      setIsUploading(false);
+      // Update student marks with uploaded data
+      if (result.marks) {
+        setStudentMarks(result.marks);
+      }
+
       setShowBulkUploadModal(false);
       setBulkUploadFile(null);
-      alert('Marks uploaded successfully! Please verify and save.');
-    }, 2000);
+      toast.success('Marks uploaded successfully! Please verify and save.');
+    } catch (err) {
+      console.error('Error uploading marks:', err);
+      toast.error(err.response?.data?.message || 'Failed to upload marks');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const getEventTypeColor = (type) => {
@@ -411,6 +501,15 @@ CSE2022005,Vikram Singh,28,`;
       </div>
     );
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading academic management data..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadData} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -1021,15 +1120,17 @@ CSE2022005,Vikram Singh,28,`;
                       setEditingSemester(null);
                       setSemesterForm({ academicYear: '', semester: '', startDate: '', endDate: '', status: 'upcoming' });
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingSemester ? 'Save Changes' : 'Add Semester'}
+                    {submitting ? 'Saving...' : (editingSemester ? 'Save Changes' : 'Add Semester')}
                   </button>
                 </div>
               </form>
@@ -1130,15 +1231,17 @@ CSE2022005,Vikram Singh,28,`;
                       setEditingEvent(null);
                       setEventForm({ title: '', date: '', endDate: '', type: 'academic', description: '' });
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingEvent ? 'Save Changes' : 'Add Event'}
+                    {submitting ? 'Saving...' : (editingEvent ? 'Save Changes' : 'Add Event')}
                   </button>
                 </div>
               </form>

@@ -82,7 +82,28 @@ export const adminService = {
     return response.data.data;
   },
 
-  // Academic Management
+  // Academic Management - Semesters
+  getSemesters: async () => {
+    const response = await api.get('/admin/academic/semesters');
+    return response.data.data;
+  },
+
+  createSemester: async (data) => {
+    const response = await api.post('/admin/academic/semesters', data);
+    return response.data.data;
+  },
+
+  updateSemester: async (id, data) => {
+    const response = await api.put(`/admin/academic/semesters/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteSemester: async (id) => {
+    const response = await api.delete(`/admin/academic/semesters/${id}`);
+    return response.data.data;
+  },
+
+  // Academic Management - Calendar
   getAcademicCalendar: async () => {
     const response = await api.get('/admin/academic/calendar');
     return response.data.data;
@@ -90,6 +111,34 @@ export const adminService = {
 
   createAcademicEvent: async (data) => {
     const response = await api.post('/admin/academic/calendar', data);
+    return response.data.data;
+  },
+
+  updateAcademicEvent: async (id, data) => {
+    const response = await api.put(`/admin/academic/calendar/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteAcademicEvent: async (id) => {
+    const response = await api.delete(`/admin/academic/calendar/${id}`);
+    return response.data.data;
+  },
+
+  // Academic Management - External Marks
+  getStudentMarks: async (params) => {
+    const response = await api.get('/admin/academic/marks', { params });
+    return response.data.data;
+  },
+
+  saveExternalMarks: async (data) => {
+    const response = await api.post('/admin/academic/marks', data);
+    return response.data.data;
+  },
+
+  bulkUploadMarks: async (formData) => {
+    const response = await api.post('/admin/academic/marks/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data.data;
   },
 
