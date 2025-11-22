@@ -15,6 +15,7 @@ import feeRoutes from './routes/feeRoutes.js';
 import hostelRoutes from './routes/hostelRoutes.js';
 import academicRoutes from './routes/academicRoutes.js';
 import sportsRoutes from './routes/sportsRoutes.js';
+import leaveRoutes from './routes/leaveRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -58,6 +59,7 @@ app.use('/api/fees', feeRoutes);
 app.use('/api/hostels', hostelRoutes);
 app.use('/api/academic', academicRoutes);
 app.use('/api/sports', sportsRoutes);
+app.use('/api/leaves', leaveRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -89,6 +91,7 @@ app.get('/', (req, res) => {
       hostels: '/api/hostels',
       academic: '/api/academic',
       sports: '/api/sports',
+      leaves: '/api/leaves',
       health: '/api/health',
     },
   });
