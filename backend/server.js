@@ -5,6 +5,12 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
+import subjectRoutes from './routes/subjectRoutes.js';
+import noticeRoutes from './routes/noticeRoutes.js';
+import approvalRoutes from './routes/approvalRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -38,6 +44,12 @@ if (process.env.NODE_ENV === 'development') {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/subjects', subjectRoutes);
+app.use('/api/notices', noticeRoutes);
+app.use('/api/approvals', approvalRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -59,6 +71,12 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
+      users: '/api/users',
+      departments: '/api/departments',
+      subjects: '/api/subjects',
+      notices: '/api/notices',
+      approvals: '/api/approvals',
+      dashboard: '/api/dashboard',
       health: '/api/health',
     },
   });
