@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User,
@@ -22,11 +22,11 @@ import {
   Briefcase,
   RefreshCw
 } from 'lucide-react';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import adminService from '../api/adminService';
 
 const AdminProfile = () => {
-  const { user, updateUser } = useContext(AuthContext);
+  const { user, updateUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
   const [showEditModal, setShowEditModal] = useState(false);
