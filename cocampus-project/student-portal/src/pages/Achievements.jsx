@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Upload, Trophy, Award, BookOpen, Code, FileText, Music, Briefcase, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { achievementsData } from '../data/achievementsData';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function Achievements() {
+  const toast = useToast();
+  const [achievementsData, setAchievementsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     category: '',
     title: '',
@@ -15,20 +23,65 @@ function Achievements() {
     visibility: 'public'
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    alert('Achievement uploaded successfully! It will be reviewed by the admin.');
-    setShowUploadForm(false);
-    setFormData({
-      category: '',
-      title: '',
-      description: '',
-      date: '',
-      issuer: '',
-      certificate: null,
-      visibility: 'public'
-    });
+  useEffect(() => {
+    loadAchievements();
+  }, []);
+
+  const loadAchievements = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getAchievements();
+      setAchievementsData(data);
+    } catch (err) {
+      console.error('Achievements error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      const submitData = new FormData();
+      Object.keys(formData).forEach(key => {
+        if (formData[key]) submitData.append(key, formData[key]);
+      });
+
+      await studentService.uploadAchievement(submitData);
+      toast.success('Achievement uploaded successfully! It will be reviewed by the admin.');
+      setShowUploadForm(false);
+      setFormData({
+        category: '',
+        title: '',
+        description: '',
+        date: '',
+        issuer: '',
+        certificate: null,
+        visibility: 'public'
+      });
+      await loadAchievements();
+    } catch (err) {
+      console.error('Upload error:', err);
+      toast.error(err.response?.data?.message || 'Failed to upload achievement');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading achievements..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadAchievements} fullScreen />;
+
+  const categories = achievementsData?.categories || [
+    { value: 'academic', label: 'Academic Excellence', icon: 'BookOpen', description: 'Academic awards and honors' },
+    { value: 'sports', label: 'Sports & Athletics', icon: 'Trophy', description: 'Sports achievements' },
+    { value: 'cultural', label: 'Cultural Activities', icon: 'Music', description: 'Cultural events and performances' },
+    { value: 'technical', label: 'Technical & Coding', icon: 'Code', description: 'Hackathons, coding competitions' },
+    { value: 'research', label: 'Research & Publications', icon: 'FileText', description: 'Research papers and publications' },
+    { value: 'other', label: 'Other Achievements', icon: 'Award', description: 'Other recognitions' }
+  ];
 
   const getCategoryIcon = (iconName) => {
     const icons = {
@@ -65,15 +118,14 @@ function Achievements() {
     };
 
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-        {status.toUpperCase()}
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
+        {(status || 'pending').toUpperCase()}
       </span>
     );
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -94,7 +146,6 @@ function Achievements() {
         </div>
       </motion.div>
 
-      {/* Upload Form */}
       {showUploadForm && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -104,11 +155,9 @@ function Achievements() {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Upload New Achievement</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Achievement Category *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Achievement Category *</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {achievementsData.categories.map((category) => (
+                {categories.map((category) => (
                   <label
                     key={category.value}
                     className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
@@ -137,9 +186,7 @@ function Achievements() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Achievement Title *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Achievement Title *</label>
               <input
                 type="text"
                 required
@@ -151,9 +198,7 @@ function Achievements() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
               <textarea
                 required
                 value={formData.description}
@@ -168,9 +213,7 @@ function Achievements() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date Achieved *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date Achieved *</label>
                 <input
                   type="date"
                   required
@@ -181,9 +224,7 @@ function Achievements() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Issued By *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Issued By *</label>
                 <input
                   type="text"
                   required
@@ -196,9 +237,7 @@ function Achievements() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Upload Certificate/Proof *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Upload Certificate/Proof *</label>
               <div className="flex items-center justify-center w-full">
                 <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -218,16 +257,12 @@ function Achievements() {
                 </label>
               </div>
               {formData.certificate && (
-                <div className="mt-2 text-sm text-gray-600">
-                  Selected: {formData.certificate.name}
-                </div>
+                <div className="mt-2 text-sm text-gray-600">Selected: {formData.certificate.name}</div>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Visibility *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Visibility *</label>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -262,15 +297,24 @@ function Achievements() {
               <button
                 type="button"
                 onClick={() => setShowUploadForm(false)}
+                disabled={submitting}
                 className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                disabled={submitting}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center"
               >
-                Upload Achievement
+                {submitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  'Upload Achievement'
+                )}
               </button>
             </div>
           </form>
@@ -279,9 +323,9 @@ function Achievements() {
 
       {/* Achievements List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {achievementsData.achievements.map((achievement, index) => (
+        {achievementsData?.achievements?.map((achievement, index) => (
           <motion.div
-            key={achievement.id}
+            key={achievement._id || achievement.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
@@ -295,7 +339,7 @@ function Achievements() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">{achievement.title}</h3>
-                    <p className="text-sm text-gray-600">{achievement.category}</p>
+                    <p className="text-sm text-gray-600 capitalize">{achievement.category}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -318,7 +362,7 @@ function Achievements() {
                 <div className="flex justify-between">
                   <span>Visibility:</span>
                   <span className={`font-medium ${achievement.visibility === 'public' ? 'text-green-600' : 'text-gray-600'}`}>
-                    {achievement.visibility.charAt(0).toUpperCase() + achievement.visibility.slice(1)}
+                    {achievement.visibility?.charAt(0).toUpperCase() + achievement.visibility?.slice(1)}
                   </span>
                 </div>
               </div>
