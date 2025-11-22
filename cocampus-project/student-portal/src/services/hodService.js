@@ -7,6 +7,17 @@ export const hodService = {
     return response.data.data;
   },
 
+  // Profile
+  getProfile: async () => {
+    const response = await api.get('/hod/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (data) => {
+    const response = await api.put('/hod/profile', data);
+    return response.data.data;
+  },
+
   // Faculty Management
   getFaculty: async (params = {}) => {
     const response = await api.get('/hod/faculty', { params });

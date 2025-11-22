@@ -1,14 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, GraduationCap, Clock, Award, TrendingUp,
   FileText, CheckCircle, AlertCircle, Calendar,
   BarChart3, UserCheck, Settings
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function HoDDashboard() {
-  const { profile, departmentStats, recentActivities } = hodData;
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Dashboard Data
+  const [profile, setProfile] = useState({});
+  const [departmentStats, setDepartmentStats] = useState({
+    totalFaculty: 0,
+    presentToday: 0,
+    totalStudents: 0,
+    sectionsCount: 0,
+    pendingApprovals: 0,
+    leaveRequests: 0,
+    gatePasses: 0,
+    departmentRating: 0
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+
+  // Load Dashboard Data
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getDashboard();
+
+      setProfile(data.profile || {});
+      setDepartmentStats(data.departmentStats || {
+        totalFaculty: 0,
+        presentToday: 0,
+        totalStudents: 0,
+        sectionsCount: 0,
+        pendingApprovals: 0,
+        leaveRequests: 0,
+        gatePasses: 0,
+        departmentRating: 0
+      });
+      setRecentActivities(data.recentActivities || []);
+    } catch (err) {
+      console.error('Error loading HoD dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stats = [
     {
@@ -95,6 +147,15 @@ function HoDDashboard() {
     return icons[type] || AlertCircle;
   };
 
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading HoD dashboard..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -106,18 +167,20 @@ function HoDDashboard() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              Welcome, {profile.name}
+              Welcome, {profile?.name || 'HoD'}
             </h1>
             <p className="text-green-100 text-lg">
-              {profile.designation} - {profile.department}
+              {profile?.designation || 'Head of Department'} - {profile?.department || ''}
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <img
-              src={profile.avatar}
-              alt={profile.name}
-              className="w-20 h-20 rounded-full border-4 border-white shadow-lg"
-            />
+            {profile?.avatar && (
+              <img
+                src={profile.avatar}
+                alt={profile.name || 'HoD'}
+                className="w-20 h-20 rounded-full border-4 border-white shadow-lg"
+              />
+            )}
           </div>
         </div>
       </motion.div>
