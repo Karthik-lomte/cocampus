@@ -1,77 +1,64 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Utensils, Edit2, Save, X, Plus, Trash2 } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function MessMenu() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [editMode, setEditMode] = useState(false);
-  const [weeklyMenu, setWeeklyMenu] = useState([
-    {
-      day: 'Monday',
-      breakfast: 'Idli, Sambar, Chutney, Tea/Coffee',
-      lunch: 'Rice, Dal, Roti, Mixed Veg, Curd',
-      snacks: 'Samosa, Tea',
-      dinner: 'Rice, Paneer Butter Masala, Roti, Salad'
-    },
-    {
-      day: 'Tuesday',
-      breakfast: 'Poha, Boiled Eggs, Tea/Coffee',
-      lunch: 'Rice, Rajma, Roti, Aloo Gobi, Curd',
-      snacks: 'Bread Pakora, Tea',
-      dinner: 'Rice, Chicken Curry, Roti, Salad'
-    },
-    {
-      day: 'Wednesday',
-      breakfast: 'Paratha, Curd, Pickle, Tea/Coffee',
-      lunch: 'Rice, Chole, Roti, Bhindi, Curd',
-      snacks: 'Vada Pav, Tea',
-      dinner: 'Rice, Egg Curry, Roti, Salad'
-    },
-    {
-      day: 'Thursday',
-      breakfast: 'Dosa, Sambar, Chutney, Tea/Coffee',
-      lunch: 'Rice, Dal Tadka, Roti, Aloo Matar, Curd',
-      snacks: 'Pakora, Tea',
-      dinner: 'Rice, Fish Curry, Roti, Salad'
-    },
-    {
-      day: 'Friday',
-      breakfast: 'Upma, Boiled Eggs, Tea/Coffee',
-      lunch: 'Biryani, Raita, Salad',
-      snacks: 'Cutlet, Tea',
-      dinner: 'Rice, Mutton Curry, Roti, Salad'
-    },
-    {
-      day: 'Saturday',
-      breakfast: 'Puri, Aloo Sabzi, Tea/Coffee',
-      lunch: 'Rice, Sambar, Roti, Cabbage, Curd',
-      snacks: 'Biscuits, Tea',
-      dinner: 'Rice, Paneer Do Pyaza, Roti, Salad'
-    },
-    {
-      day: 'Sunday',
-      breakfast: 'Chole Bhature, Tea/Coffee',
-      lunch: 'Special Thali - Rice, Dal, 2 Sabzi, Roti, Sweet, Papad',
-      snacks: 'Ice Cream',
-      dinner: 'Rice, Butter Chicken, Roti, Salad, Sweet'
+  const [weeklyMenu, setWeeklyMenu] = useState([]);
+  const [editingMenu, setEditingMenu] = useState([]);
+  const [messTimings, setMessTimings] = useState({});
+  const [editingTimings, setEditingTimings] = useState({});
+
+  // Load Mess Menu
+  useEffect(() => {
+    loadMessMenu();
+  }, []);
+
+  const loadMessMenu = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getMessMenu();
+      setWeeklyMenu(data.weeklyMenu || data.menu || []);
+      setMessTimings(data.timings || {});
+      setEditingMenu(data.weeklyMenu || data.menu || []);
+      setEditingTimings(data.timings || {});
+    } catch (err) {
+      console.error('Error loading mess menu:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
-  const [editingMenu, setEditingMenu] = useState([...weeklyMenu]);
-
-  const [messTimings, setMessTimings] = useState({
-    breakfast: { start: '7:30 AM', end: '9:00 AM' },
-    lunch: { start: '12:30 PM', end: '2:00 PM' },
-    snacks: { start: '4:30 PM', end: '5:30 PM' },
-    dinner: { start: '7:30 PM', end: '9:00 PM' }
-  });
-
-  const [editingTimings, setEditingTimings] = useState({ ...messTimings });
-
-  const handleSave = () => {
-    setWeeklyMenu([...editingMenu]);
-    setMessTimings({ ...editingTimings });
-    setEditMode(false);
-    alert('Menu and timings updated successfully!');
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await hostelService.updateMessMenu({
+        weeklyMenu: editingMenu,
+        timings: editingTimings
+      });
+      setWeeklyMenu([...editingMenu]);
+      setMessTimings({ ...editingTimings });
+      setEditMode(false);
+      toast.success('Menu and timings updated successfully!');
+    } catch (err) {
+      console.error('Error updating mess menu:', err);
+      toast.error(err.response?.data?.message || 'Failed to update menu');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
@@ -95,6 +82,15 @@ function MessMenu() {
     updated[dayIndex][meal] = value;
     setEditingMenu(updated);
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading mess menu..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadMessMenu} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -120,17 +116,19 @@ function MessMenu() {
           <div className="flex gap-3">
             <button
               onClick={handleCancel}
-              className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X size={20} />
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-shadow"
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={20} />
-              Save Changes
+              {submitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}

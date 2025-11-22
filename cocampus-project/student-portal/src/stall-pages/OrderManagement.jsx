@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -10,104 +10,78 @@ import {
   AlertCircle,
   ChefHat
 } from 'lucide-react';
+import { stallService } from '../services/stallService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const OrderManagement = () => {
-  const [orders, setOrders] = useState([
-    {
-      id: 'ORD101',
-      customerName: 'Rahul Sharma',
-      customerId: 'STU2022001',
-      items: [
-        { name: 'Masala Tea', qty: 2, price: 40 },
-        { name: 'Samosa', qty: 3, price: 45 }
-      ],
-      totalAmount: 85,
-      status: 'pending',
-      orderTime: '10:45 AM',
-      notes: 'Extra sugar in tea'
-    },
-    {
-      id: 'ORD100',
-      customerName: 'Priya Patel',
-      customerId: 'STU2022045',
-      items: [
-        { name: 'Coffee', qty: 1, price: 30 },
-        { name: 'Bread Pakoda', qty: 1, price: 25 }
-      ],
-      totalAmount: 55,
-      status: 'preparing',
-      orderTime: '10:42 AM',
-      notes: ''
-    },
-    {
-      id: 'ORD099',
-      customerName: 'Amit Singh',
-      customerId: 'STU2022078',
-      items: [
-        { name: 'Vada Pav', qty: 2, price: 40 },
-        { name: 'Lassi', qty: 1, price: 35 }
-      ],
-      totalAmount: 75,
-      status: 'pending',
-      orderTime: '10:40 AM',
-      notes: 'No onion'
-    },
-    {
-      id: 'ORD098',
-      customerName: 'Neha Gupta',
-      customerId: 'FAC2022010',
-      items: [
-        { name: 'Cold Coffee', qty: 1, price: 45 }
-      ],
-      totalAmount: 45,
-      status: 'completed',
-      orderTime: '10:35 AM',
-      notes: ''
-    },
-    {
-      id: 'ORD097',
-      customerName: 'Vikram Joshi',
-      customerId: 'STU2022056',
-      items: [
-        { name: 'Sandwich', qty: 1, price: 40 },
-        { name: 'Masala Tea', qty: 1, price: 20 }
-      ],
-      totalAmount: 60,
-      status: 'completed',
-      orderTime: '10:30 AM',
-      notes: ''
-    },
-    {
-      id: 'ORD096',
-      customerName: 'Sanjay Kumar',
-      customerId: 'STU2022089',
-      items: [
-        { name: 'Samosa', qty: 4, price: 60 }
-      ],
-      totalAmount: 60,
-      status: 'cancelled',
-      orderTime: '10:25 AM',
-      notes: 'Customer cancelled'
-    }
-  ]);
+  const toast = useToast();
 
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [orders, setOrders] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  // Load Orders
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await stallService.getOrders();
+      setOrders(data.orders || data || []);
+    } catch (err) {
+      console.error('Error loading orders:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+                          order.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    setOrders(orders.map(order =>
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
-    if (selectedOrder && selectedOrder.id === orderId) {
-      setSelectedOrder({ ...selectedOrder, status: newStatus });
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      setSubmitting(true);
+
+      if (newStatus === 'preparing') {
+        await stallService.acceptOrder(orderId);
+        toast.success('Order accepted! Starting preparation...');
+      } else if (newStatus === 'cancelled') {
+        await stallService.rejectOrder(orderId, 'Order rejected by stall');
+        toast.success('Order rejected');
+      } else if (newStatus === 'completed') {
+        await stallService.completeOrder(orderId);
+        toast.success('Order marked as completed!');
+      } else {
+        await stallService.updateOrderStatus(orderId, newStatus);
+        toast.success('Order status updated!');
+      }
+
+      await loadOrders();
+
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(null);
+      }
+    } catch (err) {
+      console.error('Error updating order status:', err);
+      toast.error(err.response?.data?.message || 'Failed to update order status');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -148,6 +122,15 @@ const OrderManagement = () => {
     completed: orders.filter(o => o.status === 'completed').length,
     cancelled: orders.filter(o => o.status === 'cancelled').length
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading orders..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadOrders} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -237,13 +220,15 @@ const OrderManagement = () => {
                   <>
                     <button
                       onClick={() => updateOrderStatus(order.id, 'preparing')}
-                      className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
+                      disabled={submitting}
+                      className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Start Preparing
+                      {submitting ? 'Processing...' : 'Start Preparing'}
                     </button>
                     <button
                       onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                      disabled={submitting}
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Reject
                     </button>
@@ -252,9 +237,10 @@ const OrderManagement = () => {
                 {order.status === 'preparing' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'completed')}
-                    className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
+                    disabled={submitting}
+                    className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Mark as Completed
+                    {submitting ? 'Processing...' : 'Mark as Completed'}
                   </button>
                 )}
                 <button
@@ -353,15 +339,17 @@ const OrderManagement = () => {
                       onClick={() => {
                         updateOrderStatus(selectedOrder.id, 'preparing');
                       }}
-                      className="py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                      disabled={submitting}
+                      className="py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Start Preparing
+                      {submitting ? 'Processing...' : 'Start Preparing'}
                     </button>
                     <button
                       onClick={() => {
                         updateOrderStatus(selectedOrder.id, 'cancelled');
                       }}
-                      className="py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      disabled={submitting}
+                      className="py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Reject Order
                     </button>
@@ -372,14 +360,16 @@ const OrderManagement = () => {
                     onClick={() => {
                       updateOrderStatus(selectedOrder.id, 'completed');
                     }}
-                    className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    disabled={submitting}
+                    className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Mark as Completed
+                    {submitting ? 'Processing...' : 'Mark as Completed'}
                   </button>
                 )}
                 <button
                   onClick={() => setSelectedOrder(null)}
-                  className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={submitting}
+                  className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Close
                 </button>

@@ -1,8 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, Calendar, Users, User, Eye, X, MessageSquare } from 'lucide-react';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AttendanceRequests() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [attendanceRequests, setAttendanceRequests] = useState([]);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -10,62 +22,24 @@ function AttendanceRequests() {
   const [remarks, setRemarks] = useState('');
   const [filter, setFilter] = useState('pending');
 
-  // Mock attendance requests data - would come from API in real app
-  const attendanceRequests = [
-    {
-      id: 1,
-      clubName: 'Technical Club',
-      requestDate: '2024-11-15',
-      eventName: 'Web Development Bootcamp',
-      eventDate: '2024-12-15',
-      selectedStudents: [
-        { rollNo: 'CSE2022020', name: 'Amit Patel', department: 'CSE', year: '2nd Year' },
-        { rollNo: 'ECE2022015', name: 'Neha Gupta', department: 'ECE', year: '2nd Year' },
-        { rollNo: 'CSE2021025', name: 'Rajesh Kumar', department: 'CSE', year: '3rd Year' }
-      ],
-      totalStudents: 3,
-      reason: 'Participation in Web Development Bootcamp organized by Technical Club. Students have registered and paid fees. This event is crucial for their skill development.',
-      status: 'pending',
-      submittedBy: 'Arun Kumar (President)',
-      remarks: ''
-    },
-    {
-      id: 2,
-      clubName: 'Technical Club',
-      requestDate: '2024-11-10',
-      eventName: 'Hackathon Preparation',
-      eventDate: '2024-11-25',
-      selectedStudents: [
-        { rollNo: 'CSE2021001', name: 'Arun Kumar', department: 'CSE', year: '3rd Year' },
-        { rollNo: 'CSE2021002', name: 'Priya Sharma', department: 'CSE', year: '3rd Year' }
-      ],
-      totalStudents: 2,
-      reason: 'Core team members need to prepare for upcoming inter-college hackathon. This is an important inter-college competition.',
-      status: 'approved',
-      submittedBy: 'Arun Kumar (President)',
-      approvedDate: '2024-11-12',
-      remarks: 'Approved for preparation. Ensure they catch up on missed classes.'
-    },
-    {
-      id: 3,
-      clubName: 'Cultural Club',
-      requestDate: '2024-11-18',
-      eventName: 'Annual Fest Rehearsal',
-      eventDate: '2024-12-20',
-      selectedStudents: [
-        { rollNo: 'ME2022010', name: 'Priya Singh', department: 'ME', year: '2nd Year' },
-        { rollNo: 'EEE2021018', name: 'Karan Sharma', department: 'EEE', year: '3rd Year' },
-        { rollNo: 'CSE2022030', name: 'Sneha Reddy', department: 'CSE', year: '2nd Year' },
-        { rollNo: 'ECE2022020', name: 'Vijay Kumar', department: 'ECE', year: '2nd Year' }
-      ],
-      totalStudents: 4,
-      reason: 'Students are participating in the annual cultural fest and require attendance for rehearsals.',
-      status: 'rejected',
-      submittedBy: 'Meera Reddy (President)',
-      rejectedDate: '2024-11-19',
-      remarks: 'Please reschedule the rehearsal to after class hours.'
+  // Load Attendance Requests
+  useEffect(() => {
+    loadAttendanceRequests();
+  }, []);
+
+  const loadAttendanceRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getPendingApprovals();
+      setAttendanceRequests(data.attendanceRequests || data || []);
+    } catch (err) {
+      console.error('Error loading attendance requests:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const filteredRequests = attendanceRequests.filter(req => {
     if (filter === 'all') return true;
@@ -91,15 +65,29 @@ function AttendanceRequests() {
     setShowDetailsModal(false);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
-    alert(`Attendance request ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setSubmitting(true);
+      await principalService.approveRequest(selectedRequest.id, {
+        action: approvalAction,
+        remarks
+      });
+      toast.success(`Attendance request ${approvalAction}d successfully!`);
+      setShowApprovalModal(false);
+      setRemarks('');
+      await loadAttendanceRequests();
+    } catch (err) {
+      console.error('Error submitting decision:', err);
+      toast.error(err.response?.data?.message || `Failed to ${approvalAction} request`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -112,6 +100,15 @@ function AttendanceRequests() {
       {status.toUpperCase()}
     </span>;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading attendance requests..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadAttendanceRequests} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -446,15 +443,17 @@ function AttendanceRequests() {
                     <button
                       type="button"
                       onClick={() => setShowApprovalModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium`}
+                      disabled={submitting}
+                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      Confirm {approvalAction === 'approve' ? 'Approval' : 'Rejection'}
+                      {submitting ? 'Processing...' : `Confirm ${approvalAction === 'approve' ? 'Approval' : 'Rejection'}`}
                     </button>
                   </div>
                 </form>

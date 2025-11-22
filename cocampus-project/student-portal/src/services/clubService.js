@@ -114,5 +114,26 @@ export const clubService = {
   getReport: async (params = {}) => {
     const response = await api.get('/club/report', { params });
     return response.data.data;
+  },
+
+  // Departments
+  getDepartments: async () => {
+    const response = await api.get('/club/departments');
+    return response.data.data;
+  },
+
+  addDepartment: async (departmentData) => {
+    const response = await api.post('/club/departments', departmentData);
+    return response.data.data;
+  },
+
+  updateDepartment: async (departmentId, departmentData) => {
+    const response = await api.put(`/club/departments/${departmentId}`, departmentData);
+    return response.data.data;
+  },
+
+  deleteDepartment: async (departmentId) => {
+    const response = await api.delete(`/club/departments/${departmentId}`);
+    return response.data.data;
   }
 };

@@ -1,32 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Building2, Edit2, Trash2, X, Users, TrendingUp } from 'lucide-react';
-import { clubData } from '../club-data/clubData';
+import { clubService } from '../services/clubService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function DepartmentManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [showAddDepartmentModal, setShowAddDepartmentModal] = useState(false);
   const [showEditDepartmentModal, setShowEditDepartmentModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
-  const [departments, setDepartments] = useState(clubData.clubDepartments);
+  const [departments, setDepartments] = useState([]);
+  const [clubInfo, setClubInfo] = useState({ totalMembers: 0 });
   const [departmentFormData, setDepartmentFormData] = useState({
     name: '',
     head: '',
     description: ''
   });
 
-  const handleAddDepartment = (e) => {
+  // Load Departments
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const loadDepartments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await clubService.getDepartments();
+      setDepartments(data.departments || data || []);
+      setClubInfo(data.clubInfo || { totalMembers: 0 });
+    } catch (err) {
+      console.error('Error loading departments:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDepartment = async (e) => {
     e.preventDefault();
-    const newDepartment = {
-      id: departments.length + 1,
-      name: departmentFormData.name,
-      head: departmentFormData.head,
-      description: departmentFormData.description,
-      members: 0
-    };
-    setDepartments([...departments, newDepartment]);
-    alert(`Department "${departmentFormData.name}" added successfully!`);
-    setShowAddDepartmentModal(false);
-    setDepartmentFormData({ name: '', head: '', description: '' });
+    try {
+      setSubmitting(true);
+      await clubService.addDepartment(departmentFormData);
+      toast.success(`Department "${departmentFormData.name}" added successfully!`);
+      setShowAddDepartmentModal(false);
+      setDepartmentFormData({ name: '', head: '', description: '' });
+      await loadDepartments();
+    } catch (err) {
+      console.error('Error adding department:', err);
+      toast.error(err.response?.data?.message || 'Failed to add department');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEditDepartment = (dept) => {
@@ -39,34 +72,54 @@ function DepartmentManagement() {
     setShowEditDepartmentModal(true);
   };
 
-  const handleUpdateDepartment = (e) => {
+  const handleUpdateDepartment = async (e) => {
     e.preventDefault();
-    const updatedDepartments = departments.map(dept =>
-      dept.id === selectedDepartment.id
-        ? { ...dept, name: departmentFormData.name, head: departmentFormData.head, description: departmentFormData.description }
-        : dept
-    );
-    setDepartments(updatedDepartments);
-    alert(`Department "${departmentFormData.name}" updated successfully!`);
-    setShowEditDepartmentModal(false);
-    setSelectedDepartment(null);
-    setDepartmentFormData({ name: '', head: '', description: '' });
+    try {
+      setSubmitting(true);
+      await clubService.updateDepartment(selectedDepartment.id, departmentFormData);
+      toast.success(`Department "${departmentFormData.name}" updated successfully!`);
+      setShowEditDepartmentModal(false);
+      setSelectedDepartment(null);
+      setDepartmentFormData({ name: '', head: '', description: '' });
+      await loadDepartments();
+    } catch (err) {
+      console.error('Error updating department:', err);
+      toast.error(err.response?.data?.message || 'Failed to update department');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleRemoveDepartment = (dept) => {
+  const handleRemoveDepartment = async (dept) => {
     if (dept.members > 0) {
-      alert(`Cannot delete "${dept.name}" department. It has ${dept.members} active members. Please reassign or remove members first.`);
+      toast.error(`Cannot delete "${dept.name}" department. It has ${dept.members} active members. Please reassign or remove members first.`);
       return;
     }
     if (window.confirm(`Are you sure you want to remove the "${dept.name}" department?`)) {
-      setDepartments(departments.filter(d => d.id !== dept.id));
-      alert(`"${dept.name}" department has been removed.`);
+      try {
+        await clubService.deleteDepartment(dept.id);
+        toast.success(`"${dept.name}" department has been removed.`);
+        await loadDepartments();
+      } catch (err) {
+        console.error('Error removing department:', err);
+        toast.error(err.response?.data?.message || 'Failed to remove department');
+      }
     }
   };
 
   const getDepartmentMemberCount = (deptName) => {
-    return clubData.clubMembers.filter(m => m.department === deptName && m.status === 'active').length;
+    const dept = departments.find(d => d.name === deptName);
+    return dept?.members || 0;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading departments..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDepartments} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -114,7 +167,7 @@ function DepartmentManagement() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Members</p>
-              <p className="text-4xl font-bold mt-2">{clubData.clubInfo.totalMembers}</p>
+              <p className="text-4xl font-bold mt-2">{clubInfo.totalMembers || 0}</p>
             </div>
             <Users size={48} className="text-blue-200" />
           </div>
@@ -130,7 +183,7 @@ function DepartmentManagement() {
             <div>
               <p className="text-green-100 text-sm">Avg Members/Dept</p>
               <p className="text-4xl font-bold mt-2">
-                {departments.length > 0 ? Math.round(clubData.clubInfo.totalMembers / departments.length) : 0}
+                {departments.length > 0 ? Math.round((clubInfo.totalMembers || 0) / departments.length) : 0}
               </p>
             </div>
             <TrendingUp size={48} className="text-green-200" />
@@ -300,15 +353,17 @@ function DepartmentManagement() {
                     <button
                       type="button"
                       onClick={() => setShowAddDepartmentModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Add Department
+                      {submitting ? 'Adding...' : 'Add Department'}
                     </button>
                   </div>
                 </form>
@@ -401,15 +456,17 @@ function DepartmentManagement() {
                     <button
                       type="button"
                       onClick={() => setShowEditDepartmentModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Update Department
+                      {submitting ? 'Updating...' : 'Update Department'}
                     </button>
                   </div>
                 </form>

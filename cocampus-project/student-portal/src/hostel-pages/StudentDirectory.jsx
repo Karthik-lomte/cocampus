@@ -1,127 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Search, Phone, Mail, Home, Filter } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function StudentDirectory() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [blockFilter, setBlockFilter] = useState('all');
+  const [students, setStudents] = useState([]);
 
-  const students = [
-    {
-      id: 1,
-      name: 'Rahul Sharma',
-      rollNo: 'CSE2022015',
-      email: 'rahul.sharma@university.edu',
-      phone: '+91 9876543210',
-      block: 'Block A',
-      roomNo: 'A-205',
-      floor: '2nd Floor',
-      department: 'Computer Science',
-      year: '3rd Year',
-      parentContact: '+91 9876543211'
-    },
-    {
-      id: 2,
-      name: 'Priya Patel',
-      rollNo: 'ECE2022032',
-      email: 'priya.patel@university.edu',
-      phone: '+91 9876543212',
-      block: 'Block B',
-      roomNo: 'B-312',
-      floor: '3rd Floor',
-      department: 'Electronics',
-      year: '3rd Year',
-      parentContact: '+91 9876543213'
-    },
-    {
-      id: 3,
-      name: 'Amit Kumar',
-      rollNo: 'ME2022018',
-      email: 'amit.kumar@university.edu',
-      phone: '+91 9876543214',
-      block: 'Block A',
-      roomNo: 'A-108',
-      floor: '1st Floor',
-      department: 'Mechanical',
-      year: '3rd Year',
-      parentContact: '+91 9876543215'
-    },
-    {
-      id: 4,
-      name: 'Sneha Reddy',
-      rollNo: 'CSE2022045',
-      email: 'sneha.reddy@university.edu',
-      phone: '+91 9876543216',
-      block: 'Block C',
-      roomNo: 'C-401',
-      floor: '4th Floor',
-      department: 'Computer Science',
-      year: '3rd Year',
-      parentContact: '+91 9876543217'
-    },
-    {
-      id: 5,
-      name: 'Vikram Singh',
-      rollNo: 'CIVIL2022022',
-      email: 'vikram.singh@university.edu',
-      phone: '+91 9876543218',
-      block: 'Block D',
-      roomNo: 'D-215',
-      floor: '2nd Floor',
-      department: 'Civil Engineering',
-      year: '3rd Year',
-      parentContact: '+91 9876543219'
-    },
-    {
-      id: 6,
-      name: 'Ananya Gupta',
-      rollNo: 'IT2022028',
-      email: 'ananya.gupta@university.edu',
-      phone: '+91 9876543220',
-      block: 'Block B',
-      roomNo: 'B-118',
-      floor: '1st Floor',
-      department: 'Information Technology',
-      year: '3rd Year',
-      parentContact: '+91 9876543221'
-    },
-    {
-      id: 7,
-      name: 'Rohan Mehta',
-      rollNo: 'EEE2022035',
-      email: 'rohan.mehta@university.edu',
-      phone: '+91 9876543222',
-      block: 'Block A',
-      roomNo: 'A-310',
-      floor: '3rd Floor',
-      department: 'Electrical Engineering',
-      year: '3rd Year',
-      parentContact: '+91 9876543223'
-    },
-    {
-      id: 8,
-      name: 'Kavitha Nair',
-      rollNo: 'CSE2022052',
-      email: 'kavitha.nair@university.edu',
-      phone: '+91 9876543224',
-      block: 'Block C',
-      roomNo: 'C-205',
-      floor: '2nd Floor',
-      department: 'Computer Science',
-      year: '3rd Year',
-      parentContact: '+91 9876543225'
+  // Load Students/Residents
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getResidents();
+      setStudents(data.residents || data || []);
+    } catch (err) {
+      console.error('Error loading student directory:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const blocks = ['Block A', 'Block B', 'Block C', 'Block D'];
 
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          student.rollNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          student.roomNo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          student.rollNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          student.roomNo?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesBlock = blockFilter === 'all' || student.block === blockFilter;
     return matchesSearch && matchesBlock;
   });
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading student directory..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadStudents} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

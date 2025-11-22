@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -11,34 +11,72 @@ import {
   X,
   Building
 } from 'lucide-react';
+import { canteenService } from '../services/canteenService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const CanteenProfile = () => {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Profile States
   const [isEditing, setIsEditing] = useState(false);
-  const [profile, setProfile] = useState({
-    name: 'Ramesh Agarwal',
-    email: 'ramesh.canteen@campus.edu',
-    phone: '+91 9876543200',
-    designation: 'Canteen Manager',
-    department: 'Campus Services',
-    employeeId: 'CAN001',
-    address: 'Campus Canteen Building, Ground Floor',
-    joinDate: '2020-01-15',
-    totalStalls: 8,
-    totalStaff: 24
-  });
+  const [profile, setProfile] = useState({});
+  const [editedProfile, setEditedProfile] = useState({});
 
-  const [editedProfile, setEditedProfile] = useState({ ...profile });
+  // Load Profile Data
+  useEffect(() => {
+    loadProfile();
+  }, []);
 
-  const handleSave = () => {
-    setProfile(editedProfile);
-    setIsEditing(false);
-    alert('Profile updated successfully!');
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await canteenService.getProfile();
+      setProfile(data || {});
+      setEditedProfile(data || {});
+    } catch (err) {
+      console.error('Error loading canteen profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await canteenService.updateProfile(editedProfile);
+      setProfile(editedProfile);
+      setIsEditing(false);
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
     setEditedProfile({ ...profile });
     setIsEditing(false);
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading profile..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -67,10 +105,11 @@ const CanteenProfile = () => {
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+              disabled={submitting}
+              className="flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save Changes
+              {submitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}
@@ -87,30 +126,30 @@ const CanteenProfile = () => {
             <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <User className="w-12 h-12 text-amber-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
-            <p className="text-gray-600">{profile.designation}</p>
-            <p className="text-sm text-amber-600 mt-1">{profile.employeeId}</p>
+            <h2 className="text-xl font-bold text-gray-900">{profile?.name || 'N/A'}</h2>
+            <p className="text-gray-600">{profile?.designation || 'N/A'}</p>
+            <p className="text-sm text-amber-600 mt-1">{profile?.employeeId || 'N/A'}</p>
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
             <div className="flex items-center text-sm">
               <Building className="w-4 h-4 text-gray-400 mr-3" />
-              <span className="text-gray-600">{profile.department}</span>
+              <span className="text-gray-600">{profile?.department || 'N/A'}</span>
             </div>
             <div className="flex items-center text-sm">
               <Calendar className="w-4 h-4 text-gray-400 mr-3" />
-              <span className="text-gray-600">Joined {profile.joinDate}</span>
+              <span className="text-gray-600">Joined {profile?.joinDate || 'N/A'}</span>
             </div>
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold text-amber-600">{profile.totalStalls}</p>
+                <p className="text-2xl font-bold text-amber-600">{profile?.totalStalls || 0}</p>
                 <p className="text-xs text-gray-600">Stalls</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-amber-600">{profile.totalStaff}</p>
+                <p className="text-2xl font-bold text-amber-600">{profile?.totalStaff || 0}</p>
                 <p className="text-xs text-gray-600">Staff</p>
               </div>
             </div>
@@ -135,12 +174,12 @@ const CanteenProfile = () => {
               {isEditing ? (
                 <input
                   type="text"
-                  value={editedProfile.name}
+                  value={editedProfile?.name || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.name}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.name || 'N/A'}</p>
               )}
             </div>
 
@@ -152,12 +191,12 @@ const CanteenProfile = () => {
               {isEditing ? (
                 <input
                   type="email"
-                  value={editedProfile.email}
+                  value={editedProfile?.email || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.email}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.email || 'N/A'}</p>
               )}
             </div>
 
@@ -169,12 +208,12 @@ const CanteenProfile = () => {
               {isEditing ? (
                 <input
                   type="tel"
-                  value={editedProfile.phone}
+                  value={editedProfile?.phone || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.phone}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.phone || 'N/A'}</p>
               )}
             </div>
 
@@ -183,7 +222,7 @@ const CanteenProfile = () => {
                 <Building className="w-4 h-4 inline mr-2" />
                 Designation
               </label>
-              <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.designation}</p>
+              <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.designation || 'N/A'}</p>
             </div>
 
             <div className="md:col-span-2">
@@ -194,12 +233,12 @@ const CanteenProfile = () => {
               {isEditing ? (
                 <input
                   type="text"
-                  value={editedProfile.address}
+                  value={editedProfile?.address || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, address: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.address}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.address || 'N/A'}</p>
               )}
             </div>
           </div>

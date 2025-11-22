@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -10,102 +10,20 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
+import { canteenService } from '../services/canteenService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const OrderOverview = () => {
-  const [orders, setOrders] = useState([
-    {
-      id: 'ORD001',
-      customerName: 'Rahul Sharma',
-      customerId: 'STU2022001',
-      stall: 'Main Canteen',
-      items: [
-        { name: 'Veg Thali', qty: 1, price: 80 },
-        { name: 'Lassi', qty: 1, price: 30 }
-      ],
-      totalAmount: 110,
-      status: 'completed',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:30 AM',
-      completedTime: '2024-11-20 10:45 AM'
-    },
-    {
-      id: 'ORD002',
-      customerName: 'Priya Patel',
-      customerId: 'STU2022045',
-      stall: 'Tea Corner',
-      items: [
-        { name: 'Masala Tea', qty: 2, price: 40 },
-        { name: 'Samosa', qty: 2, price: 30 }
-      ],
-      totalAmount: 70,
-      status: 'preparing',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:35 AM',
-      completedTime: null
-    },
-    {
-      id: 'ORD003',
-      customerName: 'Amit Singh',
-      customerId: 'STU2022078',
-      stall: 'Juice Bar',
-      items: [
-        { name: 'Orange Juice', qty: 1, price: 50 },
-        { name: 'Mixed Fruit', qty: 1, price: 60 }
-      ],
-      totalAmount: 110,
-      status: 'pending',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:40 AM',
-      completedTime: null
-    },
-    {
-      id: 'ORD004',
-      customerName: 'Neha Gupta',
-      customerId: 'STU2022032',
-      stall: 'Snacks Hub',
-      items: [
-        { name: 'Veg Burger', qty: 1, price: 60 },
-        { name: 'French Fries', qty: 1, price: 40 }
-      ],
-      totalAmount: 100,
-      status: 'completed',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:20 AM',
-      completedTime: '2024-11-20 10:35 AM'
-    },
-    {
-      id: 'ORD005',
-      customerName: 'Vikram Joshi',
-      customerId: 'STU2022056',
-      stall: 'Bakery Delights',
-      items: [
-        { name: 'Chocolate Cake', qty: 1, price: 80 },
-        { name: 'Coffee', qty: 1, price: 40 }
-      ],
-      totalAmount: 120,
-      status: 'cancelled',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:15 AM',
-      completedTime: null,
-      cancelReason: 'Customer cancelled'
-    },
-    {
-      id: 'ORD006',
-      customerName: 'Sanjay Kumar',
-      customerId: 'FAC2022010',
-      stall: 'Main Canteen',
-      items: [
-        { name: 'Special Thali', qty: 1, price: 120 },
-        { name: 'Buttermilk', qty: 1, price: 25 }
-      ],
-      totalAmount: 145,
-      status: 'preparing',
-      paymentMethod: 'Campus Coins',
-      orderTime: '2024-11-20 10:42 AM',
-      completedTime: null
-    }
-  ]);
+  const toast = useToast();
 
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Orders Data
+  const [orders, setOrders] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [stallFilter, setStallFilter] = useState('all');
@@ -113,12 +31,34 @@ const OrderOverview = () => {
 
   const stalls = ['Main Canteen', 'Tea Corner', 'Juice Bar', 'Snacks Hub', 'Bakery Delights'];
 
+  // Load Orders Data
+  useEffect(() => {
+    loadOrders();
+  }, [statusFilter, stallFilter]);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = {};
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (stallFilter !== 'all') params.stall = stallFilter;
+      const data = await canteenService.getOrders(params);
+      setOrders(data || []);
+    } catch (err) {
+      console.error('Error loading orders:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          order.customerId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    const matchesStall = stallFilter === 'all' || order.stall === stallFilter;
+    const matchesSearch = order?.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          order?.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          order?.customerId?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || order?.status === statusFilter;
+    const matchesStall = stallFilter === 'all' || order?.stall === stallFilter;
     return matchesSearch && matchesStatus && matchesStall;
   });
 
@@ -144,11 +84,20 @@ const OrderOverview = () => {
 
   const orderStats = {
     total: orders.length,
-    completed: orders.filter(o => o.status === 'completed').length,
-    preparing: orders.filter(o => o.status === 'preparing').length,
-    pending: orders.filter(o => o.status === 'pending').length,
-    cancelled: orders.filter(o => o.status === 'cancelled').length
+    completed: orders.filter(o => o?.status === 'completed').length,
+    preparing: orders.filter(o => o?.status === 'preparing').length,
+    pending: orders.filter(o => o?.status === 'pending').length,
+    cancelled: orders.filter(o => o?.status === 'cancelled').length
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading orders..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadOrders} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -237,27 +186,27 @@ const OrderOverview = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50">
+                <tr key={order?.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <span className="font-medium text-gray-900">{order.id}</span>
+                    <span className="font-medium text-gray-900">{order?.id || 'N/A'}</span>
                   </td>
                   <td className="px-6 py-4">
                     <div>
-                      <p className="font-medium text-gray-900">{order.customerName}</p>
-                      <p className="text-sm text-gray-600">{order.customerId}</p>
+                      <p className="font-medium text-gray-900">{order?.customerName || 'N/A'}</p>
+                      <p className="text-sm text-gray-600">{order?.customerId || 'N/A'}</p>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-gray-600">{order.stall}</td>
-                  <td className="px-6 py-4 text-gray-600">{order.items.length} items</td>
-                  <td className="px-6 py-4 font-medium text-gray-900">₹{order.totalAmount}</td>
+                  <td className="px-6 py-4 text-gray-600">{order?.stall || 'N/A'}</td>
+                  <td className="px-6 py-4 text-gray-600">{order?.items?.length || 0} items</td>
+                  <td className="px-6 py-4 font-medium text-gray-900">₹{order?.totalAmount || 0}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                      {getStatusIcon(order.status)}
-                      <span className="ml-1 capitalize">{order.status}</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order?.status)}`}>
+                      {getStatusIcon(order?.status)}
+                      <span className="ml-1 capitalize">{order?.status || 'N/A'}</span>
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {order.orderTime.split(' ').slice(1).join(' ')}
+                    {order?.orderTime?.split(' ').slice(1).join(' ') || 'N/A'}
                   </td>
                   <td className="px-6 py-4">
                     <button
@@ -299,59 +248,59 @@ const OrderOverview = () => {
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Order ID</span>
-                <span className="font-medium">{selectedOrder.id}</span>
+                <span className="font-medium">{selectedOrder?.id || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Customer</span>
-                <span className="font-medium">{selectedOrder.customerName}</span>
+                <span className="font-medium">{selectedOrder?.customerName || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Customer ID</span>
-                <span className="font-medium">{selectedOrder.customerId}</span>
+                <span className="font-medium">{selectedOrder?.customerId || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Stall</span>
-                <span className="font-medium">{selectedOrder.stall}</span>
+                <span className="font-medium">{selectedOrder?.stall || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Status</span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedOrder.status)}`}>
-                  {selectedOrder.status}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedOrder?.status)}`}>
+                  {selectedOrder?.status || 'N/A'}
                 </span>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
                 <h3 className="font-medium text-gray-900 mb-3">Items</h3>
                 <div className="space-y-2">
-                  {selectedOrder.items.map((item, index) => (
+                  {selectedOrder?.items?.map((item, index) => (
                     <div key={index} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">{item.name} x {item.qty}</span>
-                      <span className="font-medium">₹{item.price}</span>
+                      <span className="text-gray-600">{item?.name || 'N/A'} x {item?.qty || 0}</span>
+                      <span className="font-medium">₹{item?.price || 0}</span>
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                   <span className="font-medium text-gray-900">Total</span>
-                  <span className="font-bold text-lg">₹{selectedOrder.totalAmount}</span>
+                  <span className="font-bold text-lg">₹{selectedOrder?.totalAmount || 0}</span>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-100 space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Payment Method</span>
-                  <span className="font-medium">{selectedOrder.paymentMethod}</span>
+                  <span className="font-medium">{selectedOrder?.paymentMethod || 'N/A'}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Order Time</span>
-                  <span className="font-medium">{selectedOrder.orderTime}</span>
+                  <span className="font-medium">{selectedOrder?.orderTime || 'N/A'}</span>
                 </div>
-                {selectedOrder.completedTime && (
+                {selectedOrder?.completedTime && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Completed Time</span>
                     <span className="font-medium">{selectedOrder.completedTime}</span>
                   </div>
                 )}
-                {selectedOrder.cancelReason && (
+                {selectedOrder?.cancelReason && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Cancel Reason</span>
                     <span className="font-medium text-red-600">{selectedOrder.cancelReason}</span>

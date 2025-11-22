@@ -1,38 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Building, Calendar, Edit2, Save, X, Camera } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function HostelProfile() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [editMode, setEditMode] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: 'Mr. Rajesh Sharma',
-    email: 'rajesh.sharma@university.edu',
-    phone: '+91 9876543210',
-    alternatePhone: '+91 9876543211',
-    designation: 'Chief Warden',
-    department: 'Hostel Administration',
-    employeeId: 'WRD2015001',
-    joiningDate: '2015-06-15',
-    assignedBlocks: ['Block A', 'Block B'],
-    officeLocation: 'Hostel Admin Building, Room 101',
-    officeHours: '9:00 AM - 5:00 PM',
-    emergencyContact: '+91 9876543212',
-    qualification: 'M.Tech, Civil Engineering',
-    experience: '15 years'
-  });
+  const [profileData, setProfileData] = useState({});
+  const [editingData, setEditingData] = useState({});
 
-  const [editingData, setEditingData] = useState({ ...profileData });
+  // Load Profile
+  useEffect(() => {
+    loadProfile();
+  }, []);
 
-  const handleSave = () => {
-    setProfileData({ ...editingData });
-    setEditMode(false);
-    alert('Profile updated successfully!');
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getProfile();
+      setProfileData(data);
+      setEditingData(data);
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await hostelService.updateProfile(editingData);
+      setProfileData({ ...editingData });
+      setEditMode(false);
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
     setEditingData({ ...profileData });
     setEditMode(false);
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading profile..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -58,17 +91,19 @@ function HostelProfile() {
           <div className="flex gap-3">
             <button
               onClick={handleCancel}
-              className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X size={20} />
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-shadow"
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={20} />
-              Save Changes
+              {submitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}

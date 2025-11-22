@@ -7,6 +7,17 @@ export const sportsService = {
     return response.data.data;
   },
 
+  // Profile
+  getProfile: async () => {
+    const response = await api.get('/sports/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (profileData) => {
+    const response = await api.put('/sports/profile', profileData);
+    return response.data.data;
+  },
+
   // Facilities Management
   getFacilities: async () => {
     const response = await api.get('/sports/facilities');

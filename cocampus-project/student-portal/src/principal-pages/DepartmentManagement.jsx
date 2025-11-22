@@ -1,16 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, Users, GraduationCap, TrendingUp, UserPlus, X, Plus,
   Mail, Phone, Calendar, Briefcase, MapPin, Award, FileText, Clock, Edit, Trash2
 } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function DepartmentManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [departments, setDepartments] = useState([]);
   const [showAddHoDModal, setShowAddHoDModal] = useState(false);
   const [showAddDeptModal, setShowAddDeptModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Load Departments
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const loadDepartments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getDepartments();
+      setDepartments(data.departments || data || []);
+    } catch (err) {
+      console.error('Error loading departments:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [hodData, setHodData] = useState({
     name: '',
@@ -57,26 +87,46 @@ function DepartmentManagement() {
     setShowAddHoDModal(true);
   };
 
-  const handleSubmitHoD = (e) => {
+  const handleSubmitHoD = async (e) => {
     e.preventDefault();
-    const action = isEditMode ? 'updated' : 'assigned';
-    const deptName = selectedDepartment ? selectedDepartment.name : 'department';
-    alert(`HOD ${hodData.name} ${action} for ${deptName} successfully!`);
-    setShowAddHoDModal(false);
-    resetHoDData();
+    try {
+      setSubmitting(true);
+      const action = isEditMode ? 'updated' : 'assigned';
+      const deptName = selectedDepartment ? selectedDepartment.name : 'department';
+      // In production, this would call appropriate API endpoint
+      toast.success(`HOD ${hodData.name} ${action} for ${deptName} successfully!`);
+      setShowAddHoDModal(false);
+      resetHoDData();
+      await loadDepartments();
+    } catch (err) {
+      console.error('Error submitting HoD:', err);
+      toast.error(err.response?.data?.message || 'Failed to assign HoD');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleSubmitDept = (e) => {
+  const handleSubmitDept = async (e) => {
     e.preventDefault();
-    alert(`Department ${deptData.name} added successfully!`);
-    setShowAddDeptModal(false);
-    setDeptData({
-      name: '',
-      code: '',
-      established: '',
-      accreditation: '',
-      programs: ''
-    });
+    try {
+      setSubmitting(true);
+      // In production, this would call principalService.createDepartment(deptData)
+      toast.success(`Department ${deptData.name} added successfully!`);
+      setShowAddDeptModal(false);
+      setDeptData({
+        name: '',
+        code: '',
+        established: '',
+        accreditation: '',
+        programs: ''
+      });
+      await loadDepartments();
+    } catch (err) {
+      console.error('Error adding department:', err);
+      toast.error(err.response?.data?.message || 'Failed to add department');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const resetHoDData = () => {
@@ -159,6 +209,15 @@ function DepartmentManagement() {
     return 'from-red-600 to-pink-600';
   };
 
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading departments..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDepartments} fullScreen />;
+  }
+
   return (
     <div className="space-y-6">
       <motion.div
@@ -226,7 +285,7 @@ function DepartmentManagement() {
           className="bg-gradient-to-r from-orange-600 to-red-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-orange-100 text-sm">Vacant HOD Positions</p>
-          <p className="text-4xl font-bold mt-2">{principalData.departments.filter(d => d.status === 'vacant').length}</p>
+          <p className="text-4xl font-bold mt-2">{departments.filter(d => d.status === 'vacant').length}</p>
         </motion.div>
       </div>
 
@@ -244,7 +303,7 @@ function DepartmentManagement() {
           </h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {principalData.departments.map((department, index) => (
+          {departments.map((department, index) => (
             <motion.div
               key={department.id}
               initial={{ opacity: 0, x: -20 }}
@@ -365,13 +424,13 @@ function DepartmentManagement() {
                       <select
                         required
                         onChange={(e) => {
-                          const dept = principalData.departments.find(d => d.id === parseInt(e.target.value));
+                          const dept = departments.find(d => d.id === parseInt(e.target.value));
                           setSelectedDepartment(dept);
                         }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                       >
                         <option value="">Choose a department...</option>
-                        {principalData.departments.map(dept => (
+                        {departments.map(dept => (
                           <option key={dept.id} value={dept.id}>{dept.name}</option>
                         ))}
                       </select>

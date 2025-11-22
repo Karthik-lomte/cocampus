@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -12,33 +12,89 @@ import {
   CreditCard,
   Shield
 } from 'lucide-react';
+import { sportsService } from '../services/sportsService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const SportsProfile = () => {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Profile State
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
-    name: 'Arjun Reddy',
-    email: 'arjun.reddy@gmail.com',
-    phone: '+91 9876543220',
-    address: '123, MG Road, Hyderabad',
-    idProofType: 'Aadhaar Card',
-    idProofNumber: 'XXXX-XXXX-4532',
-    joinDate: '2024-10-15',
-    totalBookings: 12,
-    totalSpent: 8500
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    idProofType: '',
+    idProofNumber: '',
+    joinDate: '',
+    totalBookings: 0,
+    totalSpent: 0
   });
-
   const [editedProfile, setEditedProfile] = useState({ ...profile });
 
-  const handleSave = () => {
-    setProfile(editedProfile);
-    setIsEditing(false);
-    alert('Profile updated successfully!');
+  // Load Profile Data
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await sportsService.getProfile();
+
+      const profileData = {
+        name: data?.name || '',
+        email: data?.email || '',
+        phone: data?.phone || '',
+        address: data?.address || '',
+        idProofType: data?.idProofType || '',
+        idProofNumber: data?.idProofNumber || '',
+        joinDate: data?.joinDate || '',
+        totalBookings: data?.totalBookings || 0,
+        totalSpent: data?.totalSpent || 0
+      };
+      setProfile(profileData);
+      setEditedProfile(profileData);
+    } catch (err) {
+      console.error('Error loading sports profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await sportsService.updateProfile(editedProfile);
+      setProfile(editedProfile);
+      setIsEditing(false);
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
     setEditedProfile({ ...profile });
     setIsEditing(false);
   };
+
+  // Loading and Error Screens
+  if (loading) return <Loading fullScreen message="Loading profile..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -67,10 +123,11 @@ const SportsProfile = () => {
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+              disabled={submitting}
+              className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save Changes
+              {submitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}
@@ -87,33 +144,33 @@ const SportsProfile = () => {
             <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <User className="w-12 h-12 text-emerald-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
+            <h2 className="text-xl font-bold text-gray-900">{profile?.name || 'User'}</h2>
             <p className="text-gray-600">Guest User</p>
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
             <div className="flex items-center text-sm">
               <Mail className="w-4 h-4 text-gray-400 mr-3" />
-              <span className="text-gray-600">{profile.email}</span>
+              <span className="text-gray-600">{profile?.email || 'N/A'}</span>
             </div>
             <div className="flex items-center text-sm">
               <Phone className="w-4 h-4 text-gray-400 mr-3" />
-              <span className="text-gray-600">{profile.phone}</span>
+              <span className="text-gray-600">{profile?.phone || 'N/A'}</span>
             </div>
             <div className="flex items-center text-sm">
               <Calendar className="w-4 h-4 text-gray-400 mr-3" />
-              <span className="text-gray-600">Joined {profile.joinDate}</span>
+              <span className="text-gray-600">Joined {profile?.joinDate || 'N/A'}</span>
             </div>
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold text-emerald-600">{profile.totalBookings}</p>
+                <p className="text-2xl font-bold text-emerald-600">{profile?.totalBookings || 0}</p>
                 <p className="text-xs text-gray-600">Bookings</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-emerald-600">₹{profile.totalSpent.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-emerald-600">₹{(profile?.totalSpent || 0).toLocaleString()}</p>
                 <p className="text-xs text-gray-600">Spent</p>
               </div>
             </div>
@@ -138,12 +195,12 @@ const SportsProfile = () => {
               {isEditing ? (
                 <input
                   type="text"
-                  value={editedProfile.name}
+                  value={editedProfile?.name || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.name}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.name || 'N/A'}</p>
               )}
             </div>
 
@@ -155,12 +212,12 @@ const SportsProfile = () => {
               {isEditing ? (
                 <input
                   type="email"
-                  value={editedProfile.email}
+                  value={editedProfile?.email || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.email}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.email || 'N/A'}</p>
               )}
             </div>
 
@@ -172,12 +229,12 @@ const SportsProfile = () => {
               {isEditing ? (
                 <input
                   type="tel"
-                  value={editedProfile.phone}
+                  value={editedProfile?.phone || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.phone}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.phone || 'N/A'}</p>
               )}
             </div>
 
@@ -187,7 +244,7 @@ const SportsProfile = () => {
                 ID Proof
               </label>
               <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
-                {profile.idProofType} ({profile.idProofNumber})
+                {profile?.idProofType || 'N/A'} ({profile?.idProofNumber || 'N/A'})
               </p>
             </div>
 
@@ -198,13 +255,13 @@ const SportsProfile = () => {
               </label>
               {isEditing ? (
                 <textarea
-                  value={editedProfile.address}
+                  value={editedProfile?.address || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, address: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               ) : (
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile.address}</p>
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{profile?.address || 'N/A'}</p>
               )}
             </div>
           </div>
