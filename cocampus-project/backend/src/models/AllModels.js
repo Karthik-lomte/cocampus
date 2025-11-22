@@ -1139,6 +1139,177 @@ const AchievementSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // ============================================
+// 9. ADDITIONAL MODELS FOR ADMIN FEATURES
+// ============================================
+
+const SemesterSchema = new mongoose.Schema({
+  name: String,
+  academicYear: String,
+  startDate: Date,
+  endDate: Date,
+  status: {
+    type: String,
+    enum: ['upcoming', 'active', 'completed'],
+    default: 'upcoming'
+  }
+}, { timestamps: true });
+
+const AcademicCalendarSchema = new mongoose.Schema({
+  title: String,
+  description: String,
+  date: Date,
+  endDate: Date,
+  type: {
+    type: String,
+    enum: ['exam', 'holiday', 'event', 'deadline', 'other']
+  },
+  targetAudience: [String]
+}, { timestamps: true });
+
+const FeeStructureSchema = new mongoose.Schema({
+  academicYear: String,
+  department: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department'
+  },
+  semester: Number,
+  category: String,
+  components: [{
+    name: String,
+    amount: Number
+  }],
+  totalAmount: Number,
+  dueDate: Date,
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  }
+}, { timestamps: true });
+
+const PaymentSchema = new mongoose.Schema({
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  feeStructure: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FeeStructure'
+  },
+  amount: Number,
+  transactionId: String,
+  paymentMethod: String,
+  status: {
+    type: String,
+    enum: ['pending', 'completed', 'failed'],
+    default: 'pending'
+  },
+  paidAt: Date
+}, { timestamps: true });
+
+const HostelBlockSchema = new mongoose.Schema({
+  name: String,
+  blockNumber: String,
+  type: {
+    type: String,
+    enum: ['boys', 'girls']
+  },
+  totalFloors: Number,
+  roomsPerFloor: Number,
+  totalCapacity: Number,
+  currentOccupancy: Number,
+  warden: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  facilities: [String],
+  status: {
+    type: String,
+    enum: ['active', 'maintenance', 'closed'],
+    default: 'active'
+  }
+}, { timestamps: true });
+
+const RoomSchema = new mongoose.Schema({
+  roomNumber: String,
+  block: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HostelBlock'
+  },
+  floor: Number,
+  type: {
+    type: String,
+    enum: ['single', 'double', 'triple', 'quad']
+  },
+  capacity: Number,
+  occupants: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  amenities: [String],
+  status: {
+    type: String,
+    enum: ['available', 'occupied', 'maintenance'],
+    default: 'available'
+  }
+}, { timestamps: true });
+
+const CertificateRequestSchema = new mongoose.Schema({
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  certificateType: String,
+  purpose: String,
+  requestDate: Date,
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', 'completed'],
+    default: 'pending'
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: Date,
+  remarks: String
+}, { timestamps: true });
+
+const TimetableSchema = new mongoose.Schema({
+  department: String,
+  semester: Number,
+  section: String,
+  academicYear: String,
+  schedule: [{
+    day: String,
+    periods: [{
+      periodNumber: Number,
+      startTime: String,
+      endTime: String,
+      subject: String,
+      subjectCode: String,
+      faculty: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      facultyName: String,
+      room: String,
+      type: {
+        type: String,
+        enum: ['theory', 'lab', 'tutorial']
+      }
+    }]
+  }],
+  effectiveFrom: Date,
+  effectiveTo: Date,
+  status: {
+    type: String,
+    enum: ['draft', 'active', 'archived'],
+    default: 'active'
+  }
+}, { timestamps: true });
+
+// ============================================
 // EXPORT ALL MODELS
 // ============================================
 
@@ -1154,6 +1325,7 @@ module.exports = {
   Marks: mongoose.model('Marks', MarksSchema),
   Result: mongoose.model('Result', ResultSchema),
   GatePassRequest: mongoose.model('GatePassRequest', GatePassRequestSchema),
+  GatePass: mongoose.model('GatePassRequest', GatePassRequestSchema), // Alias for backward compatibility
   LeaveRequest: mongoose.model('LeaveRequest', LeaveRequestSchema),
   EventRequest: mongoose.model('EventRequest', EventRequestSchema),
   Club: mongoose.model('Club', ClubSchema),
@@ -1165,7 +1337,16 @@ module.exports = {
   Order: mongoose.model('Order', OrderSchema),
   SportsFacility: mongoose.model('SportsFacility', SportsFacilitySchema),
   FacilityBooking: mongoose.model('FacilityBooking', FacilityBookingSchema),
+  SportsBooking: mongoose.model('FacilityBooking', FacilityBookingSchema), // Alias
   Notice: mongoose.model('Notice', NoticeSchema),
   Notification: mongoose.model('Notification', NotificationSchema),
-  Achievement: mongoose.model('Achievement', AchievementSchema)
+  Achievement: mongoose.model('Achievement', AchievementSchema),
+  Semester: mongoose.model('Semester', SemesterSchema),
+  AcademicCalendar: mongoose.model('AcademicCalendar', AcademicCalendarSchema),
+  FeeStructure: mongoose.model('FeeStructure', FeeStructureSchema),
+  Payment: mongoose.model('Payment', PaymentSchema),
+  HostelBlock: mongoose.model('HostelBlock', HostelBlockSchema),
+  Room: mongoose.model('Room', RoomSchema),
+  CertificateRequest: mongoose.model('CertificateRequest', CertificateRequestSchema),
+  Timetable: mongoose.model('Timetable', TimetableSchema)
 };
