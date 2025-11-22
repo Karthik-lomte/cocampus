@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, CheckCircle, XCircle, Calendar, User, Plus, X, Upload } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { useAuth } from '../context/AuthContext';
+import principalService from '../api/principalService';
 
 function LeaveManagement() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [leaves, setLeaves] = useState([]);
+  const [stats, setStats] = useState({
+    pending: 0,
+    approvedThisMonth: 0,
+    total: 0
+  });
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [approvalAction, setApprovalAction] = useState('');
@@ -17,6 +26,53 @@ function LeaveManagement() {
     document: null
   });
 
+  const fetchLeaves = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch pending leaves (HOD/Faculty/Admin leave requests)
+      const [pendingRes, allLeavesRes] = await Promise.all([
+        principalService.getLeaves({ status: 'pending' }),
+        principalService.getLeaves({})
+      ]);
+
+      if (pendingRes.success) {
+        // Filter to show only HOD and Faculty leaves
+        const filteredLeaves = pendingRes.data.filter(
+          leave => leave.userRole === 'HOD' || leave.userRole === 'Faculty' || leave.userRole === 'Admin'
+        );
+        setLeaves(filteredLeaves);
+      }
+
+      if (allLeavesRes.success) {
+        // Calculate stats
+        const allLeaves = allLeavesRes.data;
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+
+        const approvedThisMonth = allLeaves.filter(leave => {
+          if (leave.status !== 'approved' || !leave.approvedDate) return false;
+          const approvedDate = new Date(leave.approvedDate);
+          return approvedDate.getMonth() === currentMonth && approvedDate.getFullYear() === currentYear;
+        }).length;
+
+        setStats({
+          pending: pendingRes.data?.length || 0,
+          approvedThisMonth,
+          total: allLeaves.length
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching leaves:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeaves();
+  }, []);
+
   const handleApprove = (leave) => {
     setSelectedLeave(leave);
     setApprovalAction('approve');
@@ -29,22 +85,63 @@ function LeaveManagement() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      alert('Please provide reason for rejection');
       return;
     }
-    alert('Leave ' + approvalAction + 'd successfully for ' + selectedLeave.hodName + '!');
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      let response;
+      if (approvalAction === 'approve') {
+        response = await principalService.approveLeave(selectedLeave._id, remarks);
+      } else {
+        response = await principalService.rejectLeave(selectedLeave._id, remarks, remarks);
+      }
+
+      if (response.success) {
+        alert(`Leave ${approvalAction}d successfully for ${selectedLeave.userName}!`);
+        setShowApprovalModal(false);
+        setRemarks('');
+        setSelectedLeave(null);
+        // Refresh the leaves list
+        fetchLeaves();
+      } else {
+        alert(`Failed to ${approvalAction} leave: ${response.message}`);
+      }
+    } catch (error) {
+      console.error(`Error ${approvalAction}ing leave:`, error);
+      alert(`Error ${approvalAction}ing leave. Please try again.`);
+    }
   };
 
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
-    alert('Leave application submitted to Admin successfully!');
-    setShowApplyModal(false);
-    setLeaveApplication({ leaveType: '', startDate: '', endDate: '', reason: '', document: null });
+
+    try {
+      const leaveData = {
+        leaveType: leaveApplication.leaveType,
+        startDate: leaveApplication.startDate,
+        endDate: leaveApplication.endDate,
+        reason: leaveApplication.reason
+      };
+
+      const response = await principalService.createLeave(leaveData);
+
+      if (response.success) {
+        alert('Leave application submitted successfully!');
+        setShowApplyModal(false);
+        setLeaveApplication({ leaveType: '', startDate: '', endDate: '', reason: '', document: null });
+        // Refresh the leaves list to show the newly created leave if it's pending
+        fetchLeaves();
+      } else {
+        alert(`Failed to submit leave application: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Error submitting leave application:', error);
+      alert('Error submitting leave application. Please try again.');
+    }
   };
 
   const getLeaveTypeColor = (type) => {
@@ -56,6 +153,14 @@ function LeaveManagement() {
     };
     return colors[type] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -84,7 +189,7 @@ function LeaveManagement() {
           className="bg-gradient-to-r from-orange-600 to-red-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-orange-100 text-sm">Pending Requests</p>
-          <p className="text-4xl font-bold mt-2">{principalData.hodLeaveRequests.length}</p>
+          <p className="text-4xl font-bold mt-2">{stats.pending}</p>
         </motion.div>
 
         <motion.div
@@ -94,7 +199,7 @@ function LeaveManagement() {
           className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-green-100 text-sm">Approved This Month</p>
-          <p className="text-4xl font-bold mt-2">8</p>
+          <p className="text-4xl font-bold mt-2">{stats.approvedThisMonth}</p>
         </motion.div>
 
         <motion.div
@@ -104,7 +209,7 @@ function LeaveManagement() {
           className="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-blue-100 text-sm">Total Requests</p>
-          <p className="text-4xl font-bold mt-2">24</p>
+          <p className="text-4xl font-bold mt-2">{stats.total}</p>
         </motion.div>
       </div>
 
@@ -115,12 +220,17 @@ function LeaveManagement() {
         className="bg-white rounded-xl shadow-md overflow-hidden"
       >
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">HOD Leave Requests</h2>
+          <h2 className="text-xl font-bold text-gray-900">Pending Leave Requests</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {principalData.hodLeaveRequests.map((leave, index) => (
+          {leaves.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No pending leave requests
+            </div>
+          ) : (
+            leaves.map((leave, index) => (
             <motion.div
-              key={leave.id}
+              key={leave._id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 + index * 0.1 }}
@@ -133,12 +243,15 @@ function LeaveManagement() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <h3 className="font-bold text-gray-900 text-lg">{leave.hodName}</h3>
+                      <h3 className="font-bold text-gray-900 text-lg">{leave.userName}</h3>
                       <span className={'px-3 py-1 rounded-full text-xs font-medium border ' + getLeaveTypeColor(leave.leaveType)}>
                         {leave.leaveType}
                       </span>
+                      <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                        {leave.userRole}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-3">{leave.department} Department</p>
+                    <p className="text-sm text-gray-600 mb-3">{leave.department || 'N/A'} Department</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-2">
                       <div className="flex items-center gap-2 text-gray-600">
                         <Calendar size={16} />
@@ -168,7 +281,7 @@ function LeaveManagement() {
                 </div>
               </div>
             </motion.div>
-          ))}
+          )))}
         </div>
       </motion.div>
 
@@ -199,8 +312,9 @@ function LeaveManagement() {
                 </div>
                 <form onSubmit={handleSubmitDecision} className="p-6 space-y-4">
                   <div className="space-y-2 text-sm">
-                    <p><span className="text-gray-600">HOD:</span> <span className="font-semibold">{selectedLeave.hodName}</span></p>
-                    <p><span className="text-gray-600">Department:</span> <span className="font-semibold">{selectedLeave.department}</span></p>
+                    <p><span className="text-gray-600">Name:</span> <span className="font-semibold">{selectedLeave.userName}</span></p>
+                    <p><span className="text-gray-600">Role:</span> <span className="font-semibold">{selectedLeave.userRole}</span></p>
+                    <p><span className="text-gray-600">Department:</span> <span className="font-semibold">{selectedLeave.department || 'N/A'}</span></p>
                     <p><span className="text-gray-600">Leave Type:</span> <span className="font-semibold">{selectedLeave.leaveType}</span></p>
                     <p><span className="text-gray-600">Duration:</span> <span className="font-semibold">{selectedLeave.days} days</span></p>
                   </div>

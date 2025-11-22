@@ -1,66 +1,80 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import principalService from '../api/principalService';
 
 function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
 
-  const events = [
-    { date: '2024-04-15', title: 'Annual Sports Day', type: 'event', color: 'bg-green-500' },
-    { date: '2024-04-18', title: 'Board Meeting', type: 'meeting', color: 'bg-purple-500' },
-    { date: '2024-04-20', title: 'Technical Symposium', type: 'event', color: 'bg-blue-500' },
-    { date: '2024-04-22', title: 'Faculty Development Program', type: 'training', color: 'bg-orange-500' },
-    { date: '2024-04-25', title: 'Mid-Semester Exams Begin', type: 'exam', color: 'bg-red-500' },
-    { date: '2024-04-28', title: 'Cultural Fest', type: 'event', color: 'bg-pink-500' }
-  ];
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await principalService.getAcademicEvents();
 
-  const upcomingEvents = [
-    {
-      id: 1,
-      date: '2024-04-15',
-      title: 'Annual Sports Day',
-      description: 'Inter-department sports competition',
-      type: 'Sports',
-      time: '9:00 AM - 5:00 PM',
-      venue: 'Sports Ground'
-    },
-    {
-      id: 2,
-      date: '2024-04-18',
-      title: 'Board Meeting',
-      description: 'Quarterly board of trustees meeting',
-      type: 'Meeting',
-      time: '10:00 AM - 12:00 PM',
-      venue: 'Conference Hall'
-    },
-    {
-      id: 3,
-      date: '2024-04-20',
-      title: 'Technical Symposium',
-      description: 'CSE Department technical event',
-      type: 'Academic',
-      time: '9:00 AM - 5:00 PM',
-      venue: 'Auditorium'
-    },
-    {
-      id: 4,
-      date: '2024-04-22',
-      title: 'Faculty Development Program',
-      description: 'Workshop on innovative teaching methods',
-      type: 'Training',
-      time: '2:00 PM - 5:00 PM',
-      venue: 'Seminar Hall'
-    },
-    {
-      id: 5,
-      date: '2024-04-25',
-      title: 'Mid-Semester Exams Begin',
-      description: 'Mid-semester examinations for all departments',
-      type: 'Exam',
-      time: '9:00 AM - 12:00 PM',
-      venue: 'All Exam Halls'
+      if (response.success && response.data) {
+        const eventsData = response.data;
+
+        // Transform events for calendar display
+        const calendarEvents = eventsData.map(event => {
+          const eventType = event.eventType || event.type || 'Academic';
+          return {
+            _id: event._id,
+            date: event.date || event.startDate,
+            title: event.title || event.name,
+            type: eventType,
+            color: getEventColorByType(eventType)
+          };
+        });
+
+        setEvents(calendarEvents);
+
+        // Filter upcoming events (from today onwards) and sort by date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const upcoming = eventsData
+          .filter(event => {
+            const eventDate = new Date(event.date || event.startDate);
+            return eventDate >= today;
+          })
+          .sort((a, b) => new Date(a.date || a.startDate) - new Date(b.date || b.startDate))
+          .slice(0, 5)
+          .map(event => ({
+            _id: event._id,
+            date: event.date || event.startDate,
+            title: event.title || event.name,
+            description: event.description || 'No description available',
+            type: event.eventType || event.type || 'Academic',
+            time: event.time || 'TBD',
+            venue: event.venue || event.location || 'TBD'
+          }));
+
+        setUpcomingEvents(upcoming);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const getEventColorByType = (type) => {
+    const typeStr = (type || '').toLowerCase();
+    if (typeStr.includes('sport')) return 'bg-green-500';
+    if (typeStr.includes('meeting')) return 'bg-purple-500';
+    if (typeStr.includes('academic') || typeStr.includes('symposium')) return 'bg-blue-500';
+    if (typeStr.includes('training') || typeStr.includes('workshop')) return 'bg-orange-500';
+    if (typeStr.includes('exam')) return 'bg-red-500';
+    if (typeStr.includes('cultural') || typeStr.includes('fest')) return 'bg-pink-500';
+    return 'bg-gray-500';
+  };
 
   const getEventTypeColor = (type) => {
     const colors = {
@@ -99,8 +113,21 @@ function Calendar() {
 
   const hasEvent = (day) => {
     const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return events.find(event => event.date === dateStr);
+    return events.find(event => {
+      if (!event.date) return false;
+      const eventDate = new Date(event.date);
+      const eventDateStr = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
+      return eventDateStr === dateStr;
+    });
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate);
   const calendarDays = [];
@@ -234,9 +261,14 @@ function Calendar() {
           <h2 className="text-xl font-bold text-gray-900">Upcoming Events</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {upcomingEvents.map((event, index) => (
+          {upcomingEvents.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No upcoming events scheduled
+            </div>
+          ) : (
+            upcomingEvents.map((event, index) => (
             <motion.div
-              key={event.id}
+              key={event._id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 + index * 0.1 }}
@@ -266,7 +298,7 @@ function Calendar() {
                 </div>
               </div>
             </motion.div>
-          ))}
+          )))}
         </div>
       </motion.div>
     </div>
