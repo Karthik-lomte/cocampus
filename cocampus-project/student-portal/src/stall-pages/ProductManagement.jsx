@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -11,19 +11,20 @@ import {
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
+import { stallService } from '../services/stallService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const ProductManagement = () => {
-  const [products, setProducts] = useState([
-    { id: 1, name: 'Masala Tea', category: 'Beverages', price: 20, stock: 100, available: true, sold: 28 },
-    { id: 2, name: 'Coffee', category: 'Beverages', price: 30, stock: 80, available: true, sold: 18 },
-    { id: 3, name: 'Samosa', category: 'Snacks', price: 15, stock: 50, available: true, sold: 22 },
-    { id: 4, name: 'Vada Pav', category: 'Snacks', price: 20, stock: 40, available: true, sold: 15 },
-    { id: 5, name: 'Bread Pakoda', category: 'Snacks', price: 25, stock: 30, available: true, sold: 12 },
-    { id: 6, name: 'Lassi', category: 'Beverages', price: 35, stock: 60, available: true, sold: 10 },
-    { id: 7, name: 'Sandwich', category: 'Snacks', price: 40, stock: 25, available: false, sold: 8 },
-    { id: 8, name: 'Cold Coffee', category: 'Beverages', price: 45, stock: 0, available: false, sold: 5 }
-  ]);
+  const toast = useToast();
 
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -38,6 +39,25 @@ const ProductManagement = () => {
     available: true
   });
 
+  // Load Products
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await stallService.getMenu();
+      setProducts(data.items || data || []);
+    } catch (err) {
+      console.error('Error loading products:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const categories = ['Beverages', 'Snacks', 'Fast Food', 'Desserts', 'Full Meals', 'Bakery', 'Ice Cream', 'South Indian', 'North Indian', 'Chinese'];
 
   const filteredProducts = products.filter(product => {
@@ -46,46 +66,76 @@ const ProductManagement = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddProduct = (e) => {
+  const handleAddProduct = async (e) => {
     e.preventDefault();
-    const newProduct = {
-      id: products.length + 1,
-      ...formData,
-      price: Number(formData.price),
-      stock: Number(formData.stock),
-      sold: 0
-    };
-    setProducts([...products, newProduct]);
-    setShowAddModal(false);
-    setFormData({ name: '', category: '', price: '', stock: '', available: true });
-    alert('Product added successfully!');
-  };
+    try {
+      setSubmitting(true);
+      const formDataObj = new FormData();
+      formDataObj.append('name', formData.name);
+      formDataObj.append('category', formData.category);
+      formDataObj.append('price', formData.price);
+      formDataObj.append('stock', formData.stock);
+      formDataObj.append('available', formData.available);
 
-  const handleEditProduct = (e) => {
-    e.preventDefault();
-    setProducts(products.map(product =>
-      product.id === selectedProduct.id ? {
-        ...product,
-        ...formData,
-        price: Number(formData.price),
-        stock: Number(formData.stock)
-      } : product
-    ));
-    setShowEditModal(false);
-    setSelectedProduct(null);
-    alert('Product updated successfully!');
-  };
-
-  const handleDeleteProduct = (productId) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      setProducts(products.filter(product => product.id !== productId));
+      await stallService.addMenuItem(formDataObj);
+      toast.success('Product added successfully!');
+      setShowAddModal(false);
+      setFormData({ name: '', category: '', price: '', stock: '', available: true });
+      await loadProducts();
+    } catch (err) {
+      console.error('Error adding product:', err);
+      toast.error(err.response?.data?.message || 'Failed to add product');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const toggleAvailability = (productId) => {
-    setProducts(products.map(product =>
-      product.id === productId ? { ...product, available: !product.available } : product
-    ));
+  const handleEditProduct = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      const formDataObj = new FormData();
+      formDataObj.append('name', formData.name);
+      formDataObj.append('category', formData.category);
+      formDataObj.append('price', formData.price);
+      formDataObj.append('stock', formData.stock);
+      formDataObj.append('available', formData.available);
+
+      await stallService.updateMenuItem(selectedProduct.id, formDataObj);
+      toast.success('Product updated successfully!');
+      setShowEditModal(false);
+      setSelectedProduct(null);
+      await loadProducts();
+    } catch (err) {
+      console.error('Error updating product:', err);
+      toast.error(err.response?.data?.message || 'Failed to update product');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await stallService.deleteMenuItem(productId);
+        toast.success('Product deleted successfully!');
+        await loadProducts();
+      } catch (err) {
+        console.error('Error deleting product:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete product');
+      }
+    }
+  };
+
+  const toggleAvailability = async (productId, currentAvailability) => {
+    try {
+      await stallService.toggleItemAvailability(productId, !currentAvailability);
+      toast.success('Product availability updated!');
+      await loadProducts();
+    } catch (err) {
+      console.error('Error toggling availability:', err);
+      toast.error(err.response?.data?.message || 'Failed to update availability');
+    }
   };
 
   const openEditModal = (product) => {
@@ -99,6 +149,15 @@ const ProductManagement = () => {
     });
     setShowEditModal(true);
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading products..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadProducts} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -202,7 +261,7 @@ const ProductManagement = () => {
                   <td className="px-6 py-4 text-right text-gray-600">{product.sold}</td>
                   <td className="px-6 py-4 text-center">
                     <button
-                      onClick={() => toggleAvailability(product.id)}
+                      onClick={() => toggleAvailability(product.id, product.available)}
                       className={`p-1 rounded ${product.available ? 'text-green-600' : 'text-gray-400'}`}
                     >
                       {product.available ?
@@ -325,15 +384,17 @@ const ProductManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Product
+                    {submitting ? 'Adding...' : 'Add Product'}
                   </button>
                 </div>
               </form>
@@ -417,15 +478,17 @@ const ProductManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
