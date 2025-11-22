@@ -1,12 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText, CheckCircle, XCircle, Clock, User, Calendar,
   Mail, Phone, FileCheck, AlertCircle, X, MessageSquare, Plus, Upload
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function LeaveApproval() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Leave Requests State
+  const [leaveRequests, setLeaveRequests] = useState([]);
+
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
@@ -22,7 +35,24 @@ function LeaveApproval() {
     documents: null
   });
 
-  const leaveRequests = hodData.leaveRequests;
+  // Load Leave Requests
+  useEffect(() => {
+    loadLeaveRequests();
+  }, []);
+
+  const loadLeaveRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getLeaveRequests();
+      setLeaveRequests(data.leaveRequests || data || []);
+    } catch (err) {
+      console.error('Error loading leave requests:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredRequests = leaveRequests.filter(req => {
     if (filter === 'all') return true;
@@ -41,34 +71,72 @@ function LeaveApproval() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
-    alert(`Leave request ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setSubmitting(true);
+      if (approvalAction === 'approve') {
+        await hodService.approveLeave(selectedLeave.id, remarks);
+        toast.success('Leave request approved successfully!');
+      } else {
+        await hodService.rejectLeave(selectedLeave.id, remarks);
+        toast.success('Leave request rejected successfully!');
+      }
+      await loadLeaveRequests();
+      setShowApprovalModal(false);
+      setRemarks('');
+      setSelectedLeave(null);
+    } catch (err) {
+      console.error('Error processing leave request:', err);
+      toast.error(err.response?.data?.message || `Failed to ${approvalAction} leave request`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
     // Calculate number of days
     const fromDate = new Date(leaveFormData.fromDate);
     const toDate = new Date(leaveFormData.toDate);
     const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
 
-    alert(`Leave application submitted to Principal successfully!\nDuration: ${days} days`);
-    setShowApplyLeaveModal(false);
-    setLeaveFormData({
-      leaveType: '',
-      fromDate: '',
-      toDate: '',
-      reason: '',
-      substituteArranged: '',
-      documents: null
-    });
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      formData.append('leaveType', leaveFormData.leaveType);
+      formData.append('fromDate', leaveFormData.fromDate);
+      formData.append('toDate', leaveFormData.toDate);
+      formData.append('reason', leaveFormData.reason);
+      formData.append('substituteArranged', leaveFormData.substituteArranged);
+      formData.append('days', days);
+      if (leaveFormData.documents) {
+        formData.append('documents', leaveFormData.documents);
+      }
+
+      await hodService.applyLeave(formData);
+      toast.success(`Leave application submitted to Principal successfully! Duration: ${days} days`);
+      setShowApplyLeaveModal(false);
+      setLeaveFormData({
+        leaveType: '',
+        fromDate: '',
+        toDate: '',
+        reason: '',
+        substituteArranged: '',
+        documents: null
+      });
+      await loadLeaveRequests();
+    } catch (err) {
+      console.error('Error applying for leave:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit leave application');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getLeaveTypeColor = (type) => {
@@ -80,6 +148,15 @@ function LeaveApproval() {
     };
     return colors[type] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading leave requests..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadLeaveRequests} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -401,15 +478,17 @@ function LeaveApproval() {
                     <button
                       type="button"
                       onClick={() => setShowApprovalModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium`}
+                      disabled={submitting}
+                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      Confirm {approvalAction === 'approve' ? 'Approval' : 'Rejection'}
+                      {submitting ? 'Processing...' : `Confirm ${approvalAction === 'approve' ? 'Approval' : 'Rejection'}`}
                     </button>
                   </div>
                 </form>
@@ -559,15 +638,17 @@ function LeaveApproval() {
                     <button
                       type="button"
                       onClick={() => setShowApplyLeaveModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Submit Leave Request
+                      {submitting ? 'Submitting...' : 'Submit Leave Request'}
                     </button>
                   </div>
                 </form>

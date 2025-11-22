@@ -95,8 +95,20 @@ export const hodService = {
     return response.data.data;
   },
 
-  approveLeave: async (leaveId, decision) => {
-    const response = await api.post(`/hod/leave-requests/${leaveId}/approve`, decision);
+  approveLeave: async (leaveId, remarks) => {
+    const response = await api.post(`/hod/leave-requests/${leaveId}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectLeave: async (leaveId, remarks) => {
+    const response = await api.post(`/hod/leave-requests/${leaveId}/reject`, { remarks });
+    return response.data.data;
+  },
+
+  applyLeave: async (leaveData) => {
+    const response = await api.post('/hod/leave-requests/apply', leaveData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data.data;
   },
 
