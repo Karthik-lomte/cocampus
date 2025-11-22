@@ -112,6 +112,22 @@ export const hodService = {
     return response.data.data;
   },
 
+  // Gate Pass Approvals
+  getGatePassRequests: async (params = {}) => {
+    const response = await api.get('/hod/gate-pass-requests', { params });
+    return response.data.data;
+  },
+
+  approveGatePass: async (gatePassId, remarks) => {
+    const response = await api.post(`/hod/gate-pass-requests/${gatePassId}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectGatePass: async (gatePassId, remarks) => {
+    const response = await api.post(`/hod/gate-pass-requests/${gatePassId}/reject`, { remarks });
+    return response.data.data;
+  },
+
   // Department Reports
   getDepartmentReport: async (params = {}) => {
     const response = await api.get('/hod/department/report', { params });
