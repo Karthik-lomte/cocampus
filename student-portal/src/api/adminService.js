@@ -175,6 +175,64 @@ export const getApprovalStats = async () => {
   return response.data;
 };
 
+// Fee Structures
+export const getFeeStructures = async () => {
+  const response = await apiClient.get('/fees/structures');
+  return response.data;
+};
+
+export const getFeeStructure = async (id) => {
+  const response = await apiClient.get(`/fees/structures/${id}`);
+  return response.data;
+};
+
+export const createFeeStructure = async (feeData) => {
+  const response = await apiClient.post('/fees/structures', feeData);
+  return response.data;
+};
+
+export const updateFeeStructure = async (id, feeData) => {
+  const response = await apiClient.put(`/fees/structures/${id}`, feeData);
+  return response.data;
+};
+
+export const deleteFeeStructure = async (id) => {
+  const response = await apiClient.delete(`/fees/structures/${id}`);
+  return response.data;
+};
+
+// Fee Payments
+export const getFeePayments = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/fees/payments?${params}`);
+  return response.data;
+};
+
+export const getFeePayment = async (id) => {
+  const response = await apiClient.get(`/fees/payments/${id}`);
+  return response.data;
+};
+
+export const createFeePayment = async (paymentData) => {
+  const response = await apiClient.post('/fees/payments', paymentData);
+  return response.data;
+};
+
+export const updateFeePayment = async (id, paymentData) => {
+  const response = await apiClient.put(`/fees/payments/${id}`, paymentData);
+  return response.data;
+};
+
+export const deleteFeePayment = async (id) => {
+  const response = await apiClient.delete(`/fees/payments/${id}`);
+  return response.data;
+};
+
+export const getFeeStats = async () => {
+  const response = await apiClient.get('/fees/stats');
+  return response.data;
+};
+
 export const adminService = {
   // Dashboard
   getDashboardStats,
@@ -220,6 +278,19 @@ export const adminService = {
   approveRequest,
   rejectRequest,
   getApprovalStats,
+
+  // Fees
+  getFeeStructures,
+  getFeeStructure,
+  createFeeStructure,
+  updateFeeStructure,
+  deleteFeeStructure,
+  getFeePayments,
+  getFeePayment,
+  createFeePayment,
+  updateFeePayment,
+  deleteFeePayment,
+  getFeeStats,
 };
 
 export default adminService;
