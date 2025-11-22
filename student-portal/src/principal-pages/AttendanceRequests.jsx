@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, Calendar, Users, User, Eye, X, MessageSquare } from 'lucide-react';
+import principalService from '../api/principalService';
 
 function AttendanceRequests() {
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState([]);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -10,64 +13,44 @@ function AttendanceRequests() {
   const [remarks, setRemarks] = useState('');
   const [filter, setFilter] = useState('pending');
 
-  // Mock attendance requests data - would come from API in real app
-  const attendanceRequests = [
-    {
-      id: 1,
-      clubName: 'Technical Club',
-      requestDate: '2024-11-15',
-      eventName: 'Web Development Bootcamp',
-      eventDate: '2024-12-15',
-      selectedStudents: [
-        { rollNo: 'CSE2022020', name: 'Amit Patel', department: 'CSE', year: '2nd Year' },
-        { rollNo: 'ECE2022015', name: 'Neha Gupta', department: 'ECE', year: '2nd Year' },
-        { rollNo: 'CSE2021025', name: 'Rajesh Kumar', department: 'CSE', year: '3rd Year' }
-      ],
-      totalStudents: 3,
-      reason: 'Participation in Web Development Bootcamp organized by Technical Club. Students have registered and paid fees. This event is crucial for their skill development.',
-      status: 'pending',
-      submittedBy: 'Arun Kumar (President)',
-      remarks: ''
-    },
-    {
-      id: 2,
-      clubName: 'Technical Club',
-      requestDate: '2024-11-10',
-      eventName: 'Hackathon Preparation',
-      eventDate: '2024-11-25',
-      selectedStudents: [
-        { rollNo: 'CSE2021001', name: 'Arun Kumar', department: 'CSE', year: '3rd Year' },
-        { rollNo: 'CSE2021002', name: 'Priya Sharma', department: 'CSE', year: '3rd Year' }
-      ],
-      totalStudents: 2,
-      reason: 'Core team members need to prepare for upcoming inter-college hackathon. This is an important inter-college competition.',
-      status: 'approved',
-      submittedBy: 'Arun Kumar (President)',
-      approvedDate: '2024-11-12',
-      remarks: 'Approved for preparation. Ensure they catch up on missed classes.'
-    },
-    {
-      id: 3,
-      clubName: 'Cultural Club',
-      requestDate: '2024-11-18',
-      eventName: 'Annual Fest Rehearsal',
-      eventDate: '2024-12-20',
-      selectedStudents: [
-        { rollNo: 'ME2022010', name: 'Priya Singh', department: 'ME', year: '2nd Year' },
-        { rollNo: 'EEE2021018', name: 'Karan Sharma', department: 'EEE', year: '3rd Year' },
-        { rollNo: 'CSE2022030', name: 'Sneha Reddy', department: 'CSE', year: '2nd Year' },
-        { rollNo: 'ECE2022020', name: 'Vijay Kumar', department: 'ECE', year: '2nd Year' }
-      ],
-      totalStudents: 4,
-      reason: 'Students are participating in the annual cultural fest and require attendance for rehearsals.',
-      status: 'rejected',
-      submittedBy: 'Meera Reddy (President)',
-      rejectedDate: '2024-11-19',
-      remarks: 'Please reschedule the rehearsal to after class hours.'
-    }
-  ];
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
-  const filteredRequests = attendanceRequests.filter(req => {
+  const fetchRequests = async () => {
+    try {
+      setLoading(true);
+      const response = await principalService.getApprovals({});
+
+      if (response.success && response.data) {
+        // Transform approvals data to match attendance request format
+        const transformedRequests = response.data.map(approval => ({
+          _id: approval._id,
+          id: approval._id,
+          clubName: approval.clubName || 'Club',
+          requestDate: approval.requestDate || approval.createdAt,
+          eventName: approval.title || approval.eventName || 'Event',
+          eventDate: approval.eventDate || approval.date,
+          selectedStudents: approval.students || approval.selectedStudents || [],
+          totalStudents: (approval.students || approval.selectedStudents || []).length,
+          reason: approval.reason || approval.description || '',
+          status: approval.status || 'pending',
+          submittedBy: approval.submittedBy || approval.requestedBy || 'Unknown',
+          approvedDate: approval.approvedDate,
+          rejectedDate: approval.rejectedDate,
+          remarks: approval.remarks || ''
+        }));
+
+        setRequests(transformedRequests);
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRequests = requests.filter(req => {
     if (filter === 'all') return true;
     return req.status === filter;
   });
@@ -91,15 +74,43 @@ function AttendanceRequests() {
     setShowDetailsModal(false);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
       alert('Please provide remarks for rejection');
       return;
     }
-    alert(`Attendance request ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setLoading(true);
+      const approvalId = selectedRequest._id || selectedRequest.id;
+
+      if (approvalAction === 'approve') {
+        const response = await principalService.approveRequest(approvalId);
+        if (response.success) {
+          alert('Attendance request approved successfully!');
+          await fetchRequests(); // Refresh the list
+        } else {
+          alert('Failed to approve request: ' + (response.message || 'Unknown error'));
+        }
+      } else if (approvalAction === 'reject') {
+        const response = await principalService.rejectRequest(approvalId, remarks);
+        if (response.success) {
+          alert('Attendance request rejected successfully!');
+          await fetchRequests(); // Refresh the list
+        } else {
+          alert('Failed to reject request: ' + (response.message || 'Unknown error'));
+        }
+      }
+
+      setShowApprovalModal(false);
+      setRemarks('');
+    } catch (error) {
+      console.error('Error submitting decision:', error);
+      alert('An error occurred while processing the request');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -112,6 +123,14 @@ function AttendanceRequests() {
       {status.toUpperCase()}
     </span>;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -138,7 +157,7 @@ function AttendanceRequests() {
             <div>
               <p className="text-yellow-100 text-sm">Pending</p>
               <p className="text-4xl font-bold mt-2">
-                {attendanceRequests.filter(r => r.status === 'pending').length}
+                {requests.filter(r => r.status === 'pending').length}
               </p>
             </div>
             <Clock size={48} className="text-yellow-200" />
@@ -155,7 +174,7 @@ function AttendanceRequests() {
             <div>
               <p className="text-green-100 text-sm">Approved</p>
               <p className="text-4xl font-bold mt-2">
-                {attendanceRequests.filter(r => r.status === 'approved').length}
+                {requests.filter(r => r.status === 'approved').length}
               </p>
             </div>
             <CheckCircle size={48} className="text-green-200" />
@@ -171,7 +190,7 @@ function AttendanceRequests() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Requests</p>
-              <p className="text-4xl font-bold mt-2">{attendanceRequests.length}</p>
+              <p className="text-4xl font-bold mt-2">{requests.length}</p>
             </div>
             <Calendar size={48} className="text-blue-200" />
           </div>

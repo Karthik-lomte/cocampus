@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Users, Calendar, DollarSign, CheckCircle, XCircle, FileText, X, Plus, ChevronDown, ChevronUp, Eye, Download, Image as ImageIcon, Video } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import principalService from '../api/principalService';
 
 function ClubManagement() {
+  const [loading, setLoading] = useState(true);
+  const [clubs, setClubs] = useState([]);
+  const [allRequests, setAllRequests] = useState([]);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showAddClubModal, setShowAddClubModal] = useState(false);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
@@ -21,71 +24,36 @@ function ClubManagement() {
     description: ''
   });
 
-  // Mock event requests data - in real app, this would come from API
-  const eventRequests = [
-    {
-      id: 1,
-      clubName: 'Technical Club',
-      status: 'pending',
-      academicYear: '2024-2025',
-      quarter: 'Q2',
-      programType: 'Workshop',
-      programTheme: 'Technical Skills',
-      activityName: 'Web Development Bootcamp',
-      drivenBy: 'Self-Driven Activity',
-      otherProgramType: '',
-      duration: '16',
-      startDate: '2024-04-15',
-      endDate: '2024-04-17',
-      studentParticipants: '45',
-      facultyParticipants: '3',
-      externalParticipants: '2',
-      expenditure: '15000',
-      remark: 'Industry expert invited for guest session',
-      modeOfDelivery: 'Hybrid',
-      activityLedBy: 'Student Committee',
-      objective: 'To enhance web development skills among students and provide hands-on experience with modern frameworks',
-      benefit: 'Students will gain practical knowledge of React, Node.js, and full-stack development with industry best practices',
-      videoUrl: 'https://youtube.com/sample',
-      photograph1: 'event-poster-1.jpg',
-      photograph2: 'event-banner-2.jpg',
-      reportPdf: 'activity-report.pdf',
-      additionalDoc: 'budget-breakdown.xlsx',
-      submittedDate: '2024-03-20',
-      submittedBy: 'John Doe (Club President)'
-    },
-    {
-      id: 2,
-      clubName: 'Cultural Club',
-      status: 'pending',
-      academicYear: '2024-2025',
-      quarter: 'Q2',
-      programType: 'Festival',
-      programTheme: 'Cultural Activities',
-      activityName: 'Annual Cultural Fest 2024',
-      drivenBy: 'Self-Driven Activity',
-      otherProgramType: '',
-      duration: '48',
-      startDate: '2024-04-20',
-      endDate: '2024-04-22',
-      studentParticipants: '120',
-      facultyParticipants: '8',
-      externalParticipants: '5',
-      expenditure: '50000',
-      remark: 'Three-day cultural extravaganza with multiple events',
-      modeOfDelivery: 'Offline',
-      activityLedBy: 'Faculty Coordinator',
-      objective: 'To celebrate cultural diversity and provide platform for students to showcase their talents in various art forms',
-      benefit: 'Development of soft skills, cultural awareness, team coordination, and public performance confidence among participants',
-      videoUrl: 'https://youtube.com/cultural-fest',
-      photograph1: 'fest-poster.jpg',
-      photograph2: 'fest-banner.jpg',
-      reportPdf: 'cultural-fest-proposal.pdf',
-      additionalDoc: 'event-schedule.pdf',
-      submittedDate: '2024-03-18',
-      submittedBy: 'Sarah Smith (Cultural Secretary)'
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      const [clubsRes, requestsRes] = await Promise.all([
+        principalService.getClubs(),
+        principalService.getApprovals({})
+      ]);
+
+      if (clubsRes.success && clubsRes.data) {
+        setClubs(clubsRes.data);
+      }
+
+      if (requestsRes.success && requestsRes.data) {
+        setAllRequests(requestsRes.data);
+      }
+    } catch (error) {
+      console.error('Error fetching club management data:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  // Filtered event requests (can be refined based on request type)
+  const eventRequests = allRequests.filter(req =>
+    req.type === 'event' || req.eventType || req.activityName
+  );
 
   const handleApproveAttendance = (request) => {
     setSelectedRequest(request);
@@ -116,36 +84,88 @@ function ClubManagement() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
       alert('Please provide remarks for rejection');
       return;
     }
 
-    if (selectedEventRequest) {
-      alert(`Event request "${selectedEventRequest.activityName}" ${approvalAction}d successfully!\nRemarks will be sent to the club.`);
-    } else if (selectedRequest) {
-      alert(`Attendance request ${approvalAction}d successfully for ${selectedRequest.eventName}!`);
-    }
+    try {
+      setLoading(true);
+      const requestId = selectedEventRequest?._id || selectedEventRequest?.id || selectedRequest?._id || selectedRequest?.id;
 
-    setShowApprovalModal(false);
-    setRemarks('');
-    setSelectedEventRequest(null);
-    setSelectedRequest(null);
+      if (approvalAction === 'approve') {
+        const response = await principalService.approveRequest(requestId);
+        if (response.success) {
+          if (selectedEventRequest) {
+            alert(`Event request "${selectedEventRequest.activityName}" approved successfully!`);
+          } else if (selectedRequest) {
+            alert(`Attendance request approved successfully!`);
+          }
+          await fetchAllData(); // Refresh data
+        } else {
+          alert('Failed to approve request: ' + (response.message || 'Unknown error'));
+        }
+      } else if (approvalAction === 'reject') {
+        const response = await principalService.rejectRequest(requestId, remarks);
+        if (response.success) {
+          if (selectedEventRequest) {
+            alert(`Event request "${selectedEventRequest.activityName}" rejected successfully!`);
+          } else if (selectedRequest) {
+            alert(`Attendance request rejected successfully!`);
+          }
+          await fetchAllData(); // Refresh data
+        } else {
+          alert('Failed to reject request: ' + (response.message || 'Unknown error'));
+        }
+      }
+
+      setShowApprovalModal(false);
+      setRemarks('');
+      setSelectedEventRequest(null);
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error('Error submitting decision:', error);
+      alert('An error occurred while processing the request');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddClub = (e) => {
+  const handleAddClub = async (e) => {
     e.preventDefault();
-    alert(`Club "${clubData.name}" added successfully!`);
-    setShowAddClubModal(false);
-    setClubData({
-      name: '',
-      coordinator: '',
-      category: '',
-      budget: '',
-      description: ''
-    });
+
+    try {
+      setLoading(true);
+      const response = await principalService.createClub({
+        name: clubData.name,
+        coordinator: clubData.coordinator,
+        category: clubData.category,
+        budgetAllocated: parseInt(clubData.budget),
+        description: clubData.description
+      });
+
+      if (response.success) {
+        alert(`Club "${clubData.name}" added successfully!`);
+        await fetchAllData(); // Refresh clubs
+        setShowAddClubModal(false);
+        setClubData({
+          name: '',
+          coordinator: '',
+          category: '',
+          budget: '',
+          description: ''
+        });
+      } else {
+        alert('Failed to add club: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error adding club:', error);
+      alert('An error occurred while adding the club');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleClubExpansion = (clubId) => {
@@ -154,13 +174,24 @@ function ClubManagement() {
 
   // Get attendance requests for a specific club
   const getClubAttendanceRequests = (clubName) => {
-    return principalData.clubAttendanceRequests.filter(req => req.clubName === clubName);
+    return allRequests.filter(req =>
+      (req.clubName === clubName || req.club === clubName) &&
+      req.type !== 'event' && !req.activityName
+    );
   };
 
   // Get event requests for a specific club
   const getClubEventRequests = (clubName) => {
-    return eventRequests.filter(req => req.clubName === clubName);
+    return eventRequests.filter(req => req.clubName === clubName || req.club === clubName);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -190,7 +221,7 @@ function ClubManagement() {
           className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-purple-100 text-sm">Total Clubs</p>
-          <p className="text-4xl font-bold mt-2">{principalData.clubs.length}</p>
+          <p className="text-4xl font-bold mt-2">{clubs.length}</p>
         </motion.div>
 
         <motion.div
@@ -201,7 +232,7 @@ function ClubManagement() {
         >
           <p className="text-blue-100 text-sm">Total Members</p>
           <p className="text-4xl font-bold mt-2">
-            {principalData.clubs.reduce((sum, club) => sum + club.memberCount, 0)}
+            {clubs.reduce((sum, club) => sum + (club.memberCount || 0), 0)}
           </p>
         </motion.div>
 
@@ -222,12 +253,12 @@ function ClubManagement() {
           className="bg-gradient-to-r from-orange-600 to-red-600 rounded-xl p-6 text-white shadow-lg"
         >
           <p className="text-orange-100 text-sm">Attendance Requests</p>
-          <p className="text-4xl font-bold mt-2">{principalData.clubAttendanceRequests.length}</p>
+          <p className="text-4xl font-bold mt-2">{allRequests.filter(r => r.type !== 'event' && !r.activityName).length}</p>
         </motion.div>
       </div>
 
       {/* All Clubs Sections */}
-      {principalData.clubs.map((club, index) => {
+      {clubs.map((club, index) => {
         const clubAttendanceRequests = getClubAttendanceRequests(club.name);
         const clubEventRequests = getClubEventRequests(club.name);
         const isExpanded = expandedClubId === club.id;

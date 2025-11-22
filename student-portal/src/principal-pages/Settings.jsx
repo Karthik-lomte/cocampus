@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Settings as SettingsIcon, Bell, Lock, Globe, Mail, Shield, Save } from 'lucide-react';
+import principalService from '../api/principalService';
 
 function Settings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     // Notification Settings
     emailNotifications: true,
@@ -25,10 +28,67 @@ function Settings() {
     sessionTimeout: '30'
   });
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    alert('Settings saved successfully!');
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await principalService.getSettings();
+
+      if (response.success && response.data) {
+        setSettings({
+          // Merge with defaults in case some fields are missing
+          emailNotifications: response.data.emailNotifications ?? true,
+          leaveRequestNotifications: response.data.leaveRequestNotifications ?? true,
+          eventNotifications: response.data.eventNotifications ?? true,
+          performanceAlerts: response.data.performanceAlerts ?? true,
+          profileVisibility: response.data.profileVisibility || 'public',
+          showEmail: response.data.showEmail ?? true,
+          showPhone: response.data.showPhone ?? false,
+          language: response.data.language || 'english',
+          timezone: response.data.timezone || 'IST',
+          dateFormat: response.data.dateFormat || 'DD/MM/YYYY',
+          twoFactorAuth: response.data.twoFactorAuth ?? false,
+          sessionTimeout: response.data.sessionTimeout || '30'
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      // Keep default settings if fetch fails
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+      const response = await principalService.updateSettings(settings);
+
+      if (response.success) {
+        alert('Settings saved successfully!');
+      } else {
+        alert('Failed to save settings: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('An error occurred while saving settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -304,10 +364,20 @@ function Settings() {
         >
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save size={20} />
-            Save All Settings
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={20} />
+                Save All Settings
+              </>
+            )}
           </button>
         </motion.div>
       </form>

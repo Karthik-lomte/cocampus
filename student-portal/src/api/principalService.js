@@ -217,6 +217,33 @@ export const getPerformanceMetrics = async () => {
   };
 };
 
+// Settings
+export const getSettings = async () => {
+  const response = await apiClient.get('/settings');
+  return response.data;
+};
+
+export const updateSettings = async (settingsData) => {
+  const response = await apiClient.put('/settings', settingsData);
+  return response.data;
+};
+
+// Clubs
+export const getClubs = async () => {
+  const response = await apiClient.get('/clubs');
+  return response.data;
+};
+
+export const createClub = async (clubData) => {
+  const response = await apiClient.post('/clubs', clubData);
+  return response.data;
+};
+
+export const getClubStats = async () => {
+  const response = await apiClient.get('/clubs/stats');
+  return response.data;
+};
+
 const principalService = {
   // Dashboard
   getPrincipalDashboardStats,
@@ -274,6 +301,15 @@ const principalService = {
 
   // Performance
   getPerformanceMetrics,
+
+  // Settings
+  getSettings,
+  updateSettings,
+
+  // Clubs
+  getClubs,
+  createClub,
+  getClubStats,
 };
 
 export default principalService;
