@@ -1,14 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Calendar, Clock, FileText, Upload, CheckCircle, AlertCircle, Download, X } from 'lucide-react';
-import { assignments } from '../data/assignmentsData';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const Assignments = () => {
+  const toast = useToast();
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submissionFile, setSubmissionFile] = useState(null);
   const [submissionComments, setSubmissionComments] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadAssignments();
+  }, []);
+
+  const loadAssignments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getAssignments();
+      setAssignments(data);
+    } catch (err) {
+      console.error('Assignments error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredAssignments = assignments.filter(a => {
     if (filter === 'all') return true;
@@ -41,18 +67,39 @@ const Assignments = () => {
     setShowSubmitModal(true);
   };
 
-  const handleSubmitForm = (e) => {
+  const handleSubmitForm = async (e) => {
     e.preventDefault();
     if (!submissionFile) {
-      alert('Please upload a file');
+      toast.error('Please upload a file');
       return;
     }
-    alert(`Assignment "${selectedAssignment.title}" submitted successfully!`);
-    setShowSubmitModal(false);
-    setSubmissionFile(null);
-    setSubmissionComments('');
-    setSelectedAssignment(null);
+
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      formData.append('file', submissionFile);
+      formData.append('comments', submissionComments);
+
+      await studentService.submitAssignment(selectedAssignment._id || selectedAssignment.id, formData);
+
+      toast.success(`Assignment "${selectedAssignment.title}" submitted successfully!`);
+      setShowSubmitModal(false);
+      setSubmissionFile(null);
+      setSubmissionComments('');
+      setSelectedAssignment(null);
+
+      // Reload assignments to get updated data
+      await loadAssignments();
+    } catch (err) {
+      console.error('Submit error:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit assignment');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) return <Loading fullScreen message="Loading assignments..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadAssignments} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -86,113 +133,129 @@ const Assignments = () => {
 
       {/* Assignments Grid */}
       <div className="grid grid-cols-1 gap-6">
-        {filteredAssignments.map((assignment, index) => (
-          <motion.div
-            key={assignment.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow"
-          >
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityBadge(assignment.priority)}`}>
-                      {assignment.priority}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(assignment.status)}`}>
-                      {assignment.status}
-                    </span>
-                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                      {assignment.subjectCode}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{assignment.title}</h3>
-                  <p className="text-gray-600 mb-3">{assignment.description}</p>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <span className="flex items-center">
-                      <BookOpen size={16} className="mr-1" />
-                      {assignment.subject}
-                    </span>
-                    <span className="flex items-center">
-                      <Calendar size={16} className="mr-1" />
-                      Due: {new Date(assignment.dueDate).toLocaleDateString()}
-                    </span>
-                    <span className="flex items-center">
-                      <FileText size={16} className="mr-1" />
-                      Max Marks: {assignment.maxMarks}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status-specific content */}
-              {assignment.status === 'pending' && (
-                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex items-center text-yellow-700">
-                      <AlertCircle size={20} className="mr-2" />
-                      <span className="font-medium">Submission pending</span>
+        {filteredAssignments.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-12 text-center">
+            <BookOpen className="mx-auto text-gray-400 mb-4" size={48} />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No assignments found</h3>
+            <p className="text-gray-600">
+              {filter === 'all' ? 'You have no assignments yet' : `You have no ${filter} assignments`}
+            </p>
+          </div>
+        ) : (
+          filteredAssignments.map((assignment, index) => (
+            <motion.div
+              key={assignment._id || assignment.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow"
+            >
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-2">
+                      {assignment.priority && (
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityBadge(assignment.priority)}`}>
+                          {assignment.priority}
+                        </span>
+                      )}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(assignment.status)}`}>
+                        {assignment.status}
+                      </span>
+                      <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
+                        {assignment.subject?.code || assignment.subjectCode}
+                      </span>
                     </div>
-                    <button
-                      onClick={() => handleSubmitAssignment(assignment)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                    >
-                      <Upload size={16} className="mr-2" />
-                      Submit Assignment
-                    </button>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{assignment.title}</h3>
+                    <p className="text-gray-600 mb-3">{assignment.description}</p>
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <span className="flex items-center">
+                        <BookOpen size={16} className="mr-1" />
+                        {assignment.subject?.name || assignment.subject}
+                      </span>
+                      <span className="flex items-center">
+                        <Calendar size={16} className="mr-1" />
+                        Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                      </span>
+                      <span className="flex items-center">
+                        <FileText size={16} className="mr-1" />
+                        Max Marks: {assignment.maxMarks}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {assignment.status === 'submitted' && (
-                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center text-blue-700 mb-1">
-                        <CheckCircle size={20} className="mr-2" />
-                        <span className="font-medium">Submitted successfully</span>
+                {/* Status-specific content */}
+                {assignment.status === 'pending' && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center text-yellow-700">
+                        <AlertCircle size={20} className="mr-2" />
+                        <span className="font-medium">Submission pending</span>
                       </div>
-                      <p className="text-sm text-blue-600">
-                        Submitted on: {new Date(assignment.submittedDate).toLocaleString()}
-                      </p>
+                      <button
+                        onClick={() => handleSubmitAssignment(assignment)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                      >
+                        <Upload size={16} className="mr-2" />
+                        Submit Assignment
+                      </button>
                     </div>
-                    <button className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center">
-                      <Download size={16} className="mr-2" />
-                      View Submission
-                    </button>
                   </div>
-                </div>
-              )}
+                )}
 
-              {assignment.status === 'graded' && assignment.marksObtained !== null && (
-                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center text-green-700">
-                      <CheckCircle size={20} className="mr-2" />
-                      <span className="font-medium">Graded</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-green-700">
-                        {assignment.marksObtained}/{assignment.maxMarks}
-                      </p>
-                      <p className="text-sm text-green-600">
-                        {((assignment.marksObtained / assignment.maxMarks) * 100).toFixed(1)}%
-                      </p>
+                {assignment.status === 'submitted' && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center text-blue-700 mb-1">
+                          <CheckCircle size={20} className="mr-2" />
+                          <span className="font-medium">Submitted successfully</span>
+                        </div>
+                        {assignment.submittedDate && (
+                          <p className="text-sm text-blue-600">
+                            Submitted on: {new Date(assignment.submittedDate).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                      {assignment.submissionFile && (
+                        <button className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center">
+                          <Download size={16} className="mr-2" />
+                          View Submission
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {assignment.feedback && (
-                    <div className="mt-3 p-3 bg-white rounded-lg">
-                      <p className="text-sm font-medium text-gray-700 mb-1">Faculty Feedback:</p>
-                      <p className="text-sm text-gray-600">{assignment.feedback}</p>
+                )}
+
+                {assignment.status === 'graded' && assignment.marksObtained != null && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center text-green-700">
+                        <CheckCircle size={20} className="mr-2" />
+                        <span className="font-medium">Graded</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-green-700">
+                          {assignment.marksObtained}/{assignment.maxMarks}
+                        </p>
+                        <p className="text-sm text-green-600">
+                          {((assignment.marksObtained / assignment.maxMarks) * 100).toFixed(1)}%
+                        </p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ))}
+                    {assignment.feedback && (
+                      <div className="mt-3 p-3 bg-white rounded-lg">
+                        <p className="text-sm font-medium text-gray-700 mb-1">Faculty Feedback:</p>
+                        <p className="text-sm text-gray-600">{assignment.feedback}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Submit Assignment Modal */}
@@ -204,7 +267,7 @@ const Assignments = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowSubmitModal(false)}
+              onClick={() => !submitting && setShowSubmitModal(false)}
               className="fixed inset-0 bg-black/50 z-50"
             />
 
@@ -223,8 +286,9 @@ const Assignments = () => {
                   <p className="text-blue-100 text-sm mt-1">{selectedAssignment.title}</p>
                 </div>
                 <button
-                  onClick={() => setShowSubmitModal(false)}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  onClick={() => !submitting && setShowSubmitModal(false)}
+                  disabled={submitting}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <X size={24} />
                 </button>
@@ -237,7 +301,9 @@ const Assignments = () => {
                   <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Subject:</span>
-                      <span className="text-sm font-semibold text-gray-900">{selectedAssignment.subject}</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {selectedAssignment.subject?.name || selectedAssignment.subject}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Due Date:</span>
@@ -262,6 +328,7 @@ const Assignments = () => {
                         required
                         accept=".pdf,.doc,.docx,.zip,.rar"
                         onChange={(e) => setSubmissionFile(e.target.files[0])}
+                        disabled={submitting}
                         className="w-full"
                       />
                       <p className="text-xs text-gray-500 mt-2">
@@ -276,7 +343,8 @@ const Assignments = () => {
                           <button
                             type="button"
                             onClick={() => setSubmissionFile(null)}
-                            className="text-red-600 hover:text-red-700"
+                            disabled={submitting}
+                            className="text-red-600 hover:text-red-700 disabled:opacity-50"
                           >
                             <X size={18} />
                           </button>
@@ -293,9 +361,10 @@ const Assignments = () => {
                     <textarea
                       value={submissionComments}
                       onChange={(e) => setSubmissionComments(e.target.value)}
+                      disabled={submitting}
                       rows={4}
                       placeholder="Add any additional comments for your submission..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     />
                   </div>
 
@@ -304,15 +373,24 @@ const Assignments = () => {
                     <button
                       type="button"
                       onClick={() => setShowSubmitModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium disabled:opacity-50 flex items-center justify-center"
                     >
-                      Submit Assignment
+                      {submitting ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Submitting...
+                        </>
+                      ) : (
+                        'Submit Assignment'
+                      )}
                     </button>
                   </div>
                 </form>

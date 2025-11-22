@@ -1,20 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function Calendar() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [eventsData, setEventsData] = useState([]);
 
-  const events = [
-    { date: '2024-04-15', title: 'Annual Sports Day', type: 'event', color: 'bg-green-500' },
-    { date: '2024-04-18', title: 'Board Meeting', type: 'meeting', color: 'bg-purple-500' },
-    { date: '2024-04-20', title: 'Technical Symposium', type: 'event', color: 'bg-blue-500' },
-    { date: '2024-04-22', title: 'Faculty Development Program', type: 'training', color: 'bg-orange-500' },
-    { date: '2024-04-25', title: 'Mid-Semester Exams Begin', type: 'exam', color: 'bg-red-500' },
-    { date: '2024-04-28', title: 'Cultural Fest', type: 'event', color: 'bg-pink-500' }
-  ];
+  useEffect(() => {
+    loadEvents();
+  }, []);
 
-  const upcomingEvents = [
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getEvents();
+      setEventsData(data.events || data || []);
+    } catch (err) {
+      console.error('Error loading events:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading calendar..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadEvents} fullScreen />;
+
+  const events = eventsData.filter(e => e.date).map(e => ({
+    date: e.date,
+    title: e.title,
+    type: e.type || 'event',
+    color: e.color || 'bg-blue-500'
+  }));
+
+  const upcomingEvents = eventsData.slice(0, 6).map(e => ({
+    ...e,
+    id: e.id || e._id
+  })) || [
     {
       id: 1,
       date: '2024-04-15',

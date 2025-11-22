@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   DollarSign,
@@ -18,31 +18,18 @@ import {
   User,
   Download
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const FeeManagement = () => {
-  const [feeStructures, setFeeStructures] = useState([
-    { id: 1, semester: 1, tuition: 45000, development: 5000, exam: 2000, library: 1500, sports: 1000, lab: 3000 },
-    { id: 2, semester: 2, tuition: 45000, development: 5000, exam: 2000, library: 1500, sports: 1000, lab: 3000 },
-    { id: 3, semester: 3, tuition: 48000, development: 5500, exam: 2500, library: 1500, sports: 1000, lab: 3500 },
-    { id: 4, semester: 4, tuition: 48000, development: 5500, exam: 2500, library: 1500, sports: 1000, lab: 3500 },
-    { id: 5, semester: 5, tuition: 50000, development: 6000, exam: 3000, library: 2000, sports: 1500, lab: 4000 },
-    { id: 6, semester: 6, tuition: 50000, development: 6000, exam: 3000, library: 2000, sports: 1500, lab: 4000 },
-    { id: 7, semester: 7, tuition: 52000, development: 6500, exam: 3000, library: 2000, sports: 1500, lab: 4500 },
-    { id: 8, semester: 8, tuition: 52000, development: 6500, exam: 3000, library: 2000, sports: 1500, lab: 4500 }
-  ]);
-
-  const [payments, setPayments] = useState([
-    { id: 1, studentId: 'STU2022001', studentName: 'Rahul Sharma', semester: 5, amount: 66500, status: 'paid', date: '2024-01-15', method: 'Online' },
-    { id: 2, studentId: 'STU2022002', studentName: 'Priya Patel', semester: 5, amount: 66500, status: 'paid', date: '2024-01-14', method: 'Bank Transfer' },
-    { id: 3, studentId: 'STU2022003', studentName: 'Amit Kumar', semester: 5, amount: 66500, status: 'pending', date: null, method: null },
-    { id: 4, studentId: 'STU2022004', studentName: 'Neha Gupta', semester: 5, amount: 33250, status: 'partial', date: '2024-01-10', method: 'Online' },
-    { id: 5, studentId: 'STU2022005', studentName: 'Vikram Singh', semester: 5, amount: 66500, status: 'overdue', date: null, method: null },
-    { id: 6, studentId: 'STU2023001', studentName: 'Sunita Devi', semester: 3, amount: 61500, status: 'paid', date: '2024-01-12', method: 'Cash' },
-    { id: 7, studentId: 'STU2023002', studentName: 'Rohit Verma', semester: 3, amount: 61500, status: 'paid', date: '2024-01-13', method: 'Online' },
-    { id: 8, studentId: 'STU2023003', studentName: 'Anita Reddy', semester: 3, amount: 61500, status: 'pending', date: null, method: null },
-    { id: 9, studentId: 'STU2024001', studentName: 'Kiran Rao', semester: 1, amount: 57500, status: 'paid', date: '2024-01-16', method: 'Online' },
-    { id: 10, studentId: 'STU2024002', studentName: 'Manoj Joshi', semester: 1, amount: 57500, status: 'pending', date: null, method: null }
-  ]);
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [feeStructures, setFeeStructures] = useState([]);
+  const [payments, setPayments] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [semesterFilter, setSemesterFilter] = useState('all');
@@ -55,24 +42,46 @@ const FeeManagement = () => {
     semester: '', tuition: '', development: '', exam: '', library: '', sports: '', lab: ''
   });
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [feeData, paymentData] = await Promise.all([
+        adminService.getFeeStructures(),
+        adminService.getPayments()
+      ]);
+      setFeeStructures(feeData.feeStructures || feeData || []);
+      setPayments(paymentData.payments || paymentData || []);
+    } catch (err) {
+      console.error('Fee management error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Calculate totals
   const totalFeeStructure = feeStructures.reduce((sum, fee) =>
-    sum + fee.tuition + fee.development + fee.exam + fee.library + fee.sports + fee.lab, 0
+    sum + (fee.tuition || 0) + (fee.development || 0) + (fee.exam || 0) + (fee.library || 0) + (fee.sports || 0) + (fee.lab || 0), 0
   );
 
   const feeCollected = payments
     .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const pendingDues = payments
     .filter(p => p.status === 'pending' || p.status === 'overdue' || p.status === 'partial')
     .reduce((sum, p) => {
       if (p.status === 'partial') {
         const fee = feeStructures.find(f => f.semester === p.semester);
-        const total = fee ? fee.tuition + fee.development + fee.exam + fee.library + fee.sports + fee.lab : 0;
-        return sum + (total - p.amount);
+        const total = fee ? (fee.tuition || 0) + (fee.development || 0) + (fee.exam || 0) + (fee.library || 0) + (fee.sports || 0) + (fee.lab || 0) : 0;
+        return sum + (total - (p.amount || 0));
       }
-      return sum + p.amount;
+      return sum + (p.amount || 0);
     }, 0);
 
   const calculateTotal = (fee) => {
@@ -87,59 +96,78 @@ const FeeManagement = () => {
     return matchesSearch && matchesSemester && matchesStatus;
   });
 
-  const handleAddFeeStructure = (e) => {
+  const handleAddFeeStructure = async (e) => {
     e.preventDefault();
     const existingFee = feeStructures.find(f => f.semester === parseInt(formData.semester));
     if (existingFee) {
-      alert('Fee structure for this semester already exists. Please edit the existing one.');
+      toast.error('Fee structure for this semester already exists. Please edit the existing one.');
       return;
     }
-    const newFee = {
-      id: feeStructures.length + 1,
-      semester: parseInt(formData.semester),
-      tuition: parseFloat(formData.tuition),
-      development: parseFloat(formData.development),
-      exam: parseFloat(formData.exam),
-      library: parseFloat(formData.library),
-      sports: parseFloat(formData.sports),
-      lab: parseFloat(formData.lab)
-    };
-    setFeeStructures([...feeStructures, newFee].sort((a, b) => a.semester - b.semester));
-    setShowAddModal(false);
-    setFormData({ semester: '', tuition: '', development: '', exam: '', library: '', sports: '', lab: '' });
-    alert('Fee structure added successfully!');
+    try {
+      setSubmitting(true);
+      const feeData = {
+        semester: parseInt(formData.semester),
+        tuition: parseFloat(formData.tuition),
+        development: parseFloat(formData.development),
+        exam: parseFloat(formData.exam),
+        library: parseFloat(formData.library),
+        sports: parseFloat(formData.sports),
+        lab: parseFloat(formData.lab)
+      };
+      await adminService.createFeeStructure(feeData);
+      toast.success('Fee structure added successfully!');
+      await loadData();
+      setShowAddModal(false);
+      setFormData({ semester: '', tuition: '', development: '', exam: '', library: '', sports: '', lab: '' });
+    } catch (err) {
+      console.error('Add fee structure error:', err);
+      toast.error(err.response?.data?.message || 'Failed to add fee structure');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditFeeStructure = (e) => {
+  const handleEditFeeStructure = async (e) => {
     e.preventDefault();
-    setFeeStructures(feeStructures.map(fee =>
-      fee.id === selectedFee.id
-        ? {
-            ...fee,
-            tuition: parseFloat(formData.tuition),
-            development: parseFloat(formData.development),
-            exam: parseFloat(formData.exam),
-            library: parseFloat(formData.library),
-            sports: parseFloat(formData.sports),
-            lab: parseFloat(formData.lab)
-          }
-        : fee
-    ));
-    setShowEditModal(false);
-    setSelectedFee(null);
-    alert('Fee structure updated successfully!');
+    try {
+      setSubmitting(true);
+      const feeData = {
+        tuition: parseFloat(formData.tuition),
+        development: parseFloat(formData.development),
+        exam: parseFloat(formData.exam),
+        library: parseFloat(formData.library),
+        sports: parseFloat(formData.sports),
+        lab: parseFloat(formData.lab)
+      };
+      await adminService.updateFeeStructure(selectedFee.id, feeData);
+      toast.success('Fee structure updated successfully!');
+      await loadData();
+      setShowEditModal(false);
+      setSelectedFee(null);
+    } catch (err) {
+      console.error('Update fee structure error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update fee structure');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteFeeStructure = (feeId) => {
+  const handleDeleteFeeStructure = async (feeId) => {
     const fee = feeStructures.find(f => f.id === feeId);
-    const hasPayments = payments.some(p => p.semester === fee.semester);
+    const hasPayments = payments.some(p => p.semester === fee?.semester);
     if (hasPayments) {
-      alert('Cannot delete fee structure with existing payments. Please clear payments first.');
+      toast.error('Cannot delete fee structure with existing payments. Please clear payments first.');
       return;
     }
     if (window.confirm('Are you sure you want to delete this fee structure?')) {
-      setFeeStructures(feeStructures.filter(f => f.id !== feeId));
-      alert('Fee structure deleted successfully!');
+      try {
+        await adminService.deleteFeeStructure(feeId);
+        toast.success('Fee structure deleted successfully!');
+        await loadData();
+      } catch (err) {
+        console.error('Delete fee structure error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete fee structure');
+      }
     }
   };
 
@@ -184,6 +212,9 @@ const FeeManagement = () => {
       maximumFractionDigits: 0
     }).format(amount);
   };
+
+  if (loading) return <Loading fullScreen message="Loading fee management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadData} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -596,15 +627,17 @@ const FeeManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Fee Structure
+                    {submitting ? 'Adding...' : 'Add Fee Structure'}
                   </button>
                 </div>
               </form>
@@ -709,15 +742,17 @@ const FeeManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>

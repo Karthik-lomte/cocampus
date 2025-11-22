@@ -1,18 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Save, CheckCircle, XCircle, Clock, Users } from 'lucide-react';
-import { facultyData } from '../faculty-data/facultyData';
-import { studentsData } from '../faculty-data/studentsData';
+import { facultyService } from '../services/facultyService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AttendanceManagement() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sessionData, setSessionData] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [sessionType, setSessionType] = useState('Regular');
   const [attendance, setAttendance] = useState({});
 
-  const classes = ['CSE-3A', 'CSE-3B', 'CSE-4A'];
-  const students = selectedClass ? (studentsData[selectedClass] || []) : [];
+  useEffect(() => {
+    loadSessionData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedClass) {
+      loadStudents();
+    } else {
+      setStudents([]);
+      setAttendance({});
+    }
+  }, [selectedClass]);
+
+  const loadSessionData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await facultyService.getSessions();
+      setSessionData(data);
+    } catch (err) {
+      console.error('Session data error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStudents = async () => {
+    try {
+      setLoadingStudents(true);
+      const data = await facultyService.getStudents({ class: selectedClass });
+      setStudents(data.students || data || []);
+      setAttendance({});
+    } catch (err) {
+      console.error('Students error:', err);
+      toast.error('Failed to load students');
+      setStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const classes = sessionData?.classes || [];
+  const subjects = sessionData?.subjects || [];
 
   const handleAttendanceChange = (rollNo, status) => {
     setAttendance(prev => ({
@@ -24,17 +76,55 @@ function AttendanceManagement() {
   const handleMarkAllPresent = () => {
     const allPresent = {};
     students.forEach(student => {
-      allPresent[student.rollNo] = 'present';
+      allPresent[student.rollNo || student.rollNumber] = 'present';
     });
     setAttendance(allPresent);
   };
 
-  const handleSaveAttendance = () => {
+  const handleSaveAttendance = async () => {
     if (!selectedClass || !selectedSubject) {
-      alert('Please select class and subject');
+      toast.error('Please select class and subject');
       return;
     }
-    alert(`Attendance saved successfully for ${selectedClass} - ${selectedSubject}`);
+
+    const markedCount = Object.keys(attendance).length;
+    if (markedCount === 0) {
+      toast.error('Please mark attendance for at least one student');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Create attendance session
+      const sessionResponse = await facultyService.createSession({
+        date: selectedDate,
+        class: selectedClass,
+        subject: selectedSubject,
+        sessionType,
+        studentsPresent: students.length
+      });
+
+      // Mark attendance for each student
+      const attendanceData = {
+        attendance: Object.entries(attendance).map(([rollNo, status]) => ({
+          rollNo,
+          status
+        }))
+      };
+
+      await facultyService.markAttendance(sessionResponse._id || sessionResponse.id, attendanceData);
+
+      toast.success(`Attendance saved successfully for ${selectedClass} - ${selectedSubject}`);
+      setAttendance({});
+      setSelectedClass('');
+      setSelectedSubject('');
+    } catch (err) {
+      console.error('Save attendance error:', err);
+      toast.error(err.response?.data?.message || 'Failed to save attendance');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getAttendanceColor = (percentage) => {
@@ -42,6 +132,9 @@ function AttendanceManagement() {
     if (percentage >= 65) return 'text-orange-600';
     return 'text-red-600';
   };
+
+  if (loading) return <Loading fullScreen message="Loading attendance management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadSessionData} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -99,9 +192,9 @@ function AttendanceManagement() {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">Select Subject</option>
-              {facultyData.assignedSubjects.map(subject => (
-                <option key={subject.code} value={subject.code}>
-                  {subject.name} ({subject.code})
+              {subjects.map(subject => (
+                <option key={subject._id || subject.code} value={subject.code || subject.subjectCode}>
+                  {subject.name || subject.subjectName} ({subject.code || subject.subjectCode})
                 </option>
               ))}
             </select>
@@ -146,10 +239,11 @@ function AttendanceManagement() {
                 </button>
                 <button
                   onClick={handleSaveAttendance}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                  disabled={saving || loadingStudents}
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Save size={20} />
-                  Save Attendance
+                  {saving ? 'Saving...' : 'Save Attendance'}
                 </button>
               </div>
             </div>
@@ -157,132 +251,170 @@ function AttendanceManagement() {
 
           {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Photo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attendance %</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {students.map((student, index) => (
-                  <motion.tr
-                    key={student.rollNo}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{student.rollNo}</td>
-                    <td className="px-6 py-4">
-                      <img src={student.photo} alt={student.name} className="w-10 h-10 rounded-full" />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{student.name}</td>
-                    <td className="px-6 py-4">
-                      <span className={`text-sm font-semibold ${getAttendanceColor(student.attendance)}`}>
-                        {student.attendance}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleAttendanceChange(student.rollNo, 'present')}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            attendance[student.rollNo] === 'present'
-                              ? 'bg-green-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-green-100'
-                          }`}
-                        >
-                          <CheckCircle size={16} className="inline mr-1" />
-                          Present
-                        </button>
-                        <button
-                          onClick={() => handleAttendanceChange(student.rollNo, 'absent')}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            attendance[student.rollNo] === 'absent'
-                              ? 'bg-red-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-red-100'
-                          }`}
-                        >
-                          <XCircle size={16} className="inline mr-1" />
-                          Absent
-                        </button>
-                        <button
-                          onClick={() => handleAttendanceChange(student.rollNo, 'late')}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            attendance[student.rollNo] === 'late'
-                              ? 'bg-orange-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-orange-100'
-                          }`}
-                        >
-                          <Clock size={16} className="inline mr-1" />
-                          Late
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
+            {loadingStudents ? (
+              <div className="p-8 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-gray-600">Loading students...</p>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <Users size={48} className="mx-auto mb-4 text-gray-300" />
+                <p>No students found for this class</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Photo</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attendance %</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {students.map((student, index) => {
+                    const rollNo = student.rollNo || student.rollNumber;
+                    const studentName = student.name || student.studentName;
+                    const studentPhoto = student.photo || student.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&size=40&background=059669&color=fff&bold=true`;
+                    const attendancePercentage = student.attendance || student.attendancePercentage || 0;
+
+                    return (
+                      <motion.tr
+                        key={rollNo || index}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{rollNo}</td>
+                        <td className="px-6 py-4">
+                          <img src={studentPhoto} alt={studentName} className="w-10 h-10 rounded-full" />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{studentName}</td>
+                        <td className="px-6 py-4">
+                          <span className={`text-sm font-semibold ${getAttendanceColor(attendancePercentage)}`}>
+                            {attendancePercentage}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleAttendanceChange(rollNo, 'present')}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                attendance[rollNo] === 'present'
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-green-100'
+                              }`}
+                            >
+                              <CheckCircle size={16} className="inline mr-1" />
+                              Present
+                            </button>
+                            <button
+                              onClick={() => handleAttendanceChange(rollNo, 'absent')}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                attendance[rollNo] === 'absent'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-red-100'
+                              }`}
+                            >
+                              <XCircle size={16} className="inline mr-1" />
+                              Absent
+                            </button>
+                            <button
+                              onClick={() => handleAttendanceChange(rollNo, 'late')}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                attendance[rollNo] === 'late'
+                                  ? 'bg-orange-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-orange-100'
+                              }`}
+                            >
+                              <Clock size={16} className="inline mr-1" />
+                              Late
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-gray-200">
-            {students.map((student, index) => (
-              <motion.div
-                key={student.rollNo}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: index * 0.05 }}
-                className="p-4"
-              >
-                <div className="flex items-start gap-3 mb-3">
-                  <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-full" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{student.name}</h3>
-                    <p className="text-sm text-gray-600">{student.rollNo}</p>
-                    <p className={`text-sm font-semibold ${getAttendanceColor(student.attendance)}`}>
-                      Attendance: {student.attendance}%
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAttendanceChange(student.rollNo, 'present')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendance[student.rollNo] === 'present'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}
+            {loadingStudents ? (
+              <div className="p-8 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-gray-600">Loading students...</p>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <Users size={48} className="mx-auto mb-4 text-gray-300" />
+                <p>No students found for this class</p>
+              </div>
+            ) : (
+              students.map((student, index) => {
+                const rollNo = student.rollNo || student.rollNumber;
+                const studentName = student.name || student.studentName;
+                const studentPhoto = student.photo || student.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&size=48&background=059669&color=fff&bold=true`;
+                const attendancePercentage = student.attendance || student.attendancePercentage || 0;
+
+                return (
+                  <motion.div
+                    key={rollNo || index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4"
                   >
-                    P
-                  </button>
-                  <button
-                    onClick={() => handleAttendanceChange(student.rollNo, 'absent')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendance[student.rollNo] === 'absent'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    A
-                  </button>
-                  <button
-                    onClick={() => handleAttendanceChange(student.rollNo, 'late')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      attendance[student.rollNo] === 'late'
-                        ? 'bg-orange-600 text-white'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    L
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <div className="flex items-start gap-3 mb-3">
+                      <img src={studentPhoto} alt={studentName} className="w-12 h-12 rounded-full" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900">{studentName}</h3>
+                        <p className="text-sm text-gray-600">{rollNo}</p>
+                        <p className={`text-sm font-semibold ${getAttendanceColor(attendancePercentage)}`}>
+                          Attendance: {attendancePercentage}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAttendanceChange(rollNo, 'present')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          attendance[rollNo] === 'present'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        P
+                      </button>
+                      <button
+                        onClick={() => handleAttendanceChange(rollNo, 'absent')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          attendance[rollNo] === 'absent'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        A
+                      </button>
+                      <button
+                        onClick={() => handleAttendanceChange(rollNo, 'late')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          attendance[rollNo] === 'late'
+                            ? 'bg-orange-600 text-white'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        L
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </motion.div>
       )}

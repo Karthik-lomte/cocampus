@@ -1,19 +1,49 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Clock, User, Calendar, Phone,
   AlertCircle, X, FileText, TrendingUp
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function GatePassApproval() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Gate Pass Requests State
+  const [gatePassRequests, setGatePassRequests] = useState([]);
+
   const [selectedPass, setSelectedPass] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
   const [remarks, setRemarks] = useState('');
   const [filter, setFilter] = useState('pending');
 
-  const gatePassRequests = hodData.gatePassRequests;
+  // Load Gate Pass Requests
+  useEffect(() => {
+    loadGatePassRequests();
+  }, []);
+
+  const loadGatePassRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getGatePassRequests();
+      setGatePassRequests(data.gatePassRequests || data || []);
+    } catch (err) {
+      console.error('Error loading gate pass requests:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredRequests = gatePassRequests.filter(req => {
     if (filter === 'all') return true;
@@ -32,15 +62,32 @@ function GatePassApproval() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
-    alert(`Gate pass ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setSubmitting(true);
+      if (approvalAction === 'approve') {
+        await hodService.approveGatePass(selectedPass.id, remarks);
+        toast.success('Gate pass approved successfully!');
+      } else {
+        await hodService.rejectGatePass(selectedPass.id, remarks);
+        toast.success('Gate pass rejected successfully!');
+      }
+      await loadGatePassRequests();
+      setShowApprovalModal(false);
+      setRemarks('');
+      setSelectedPass(null);
+    } catch (err) {
+      console.error('Error processing gate pass:', err);
+      toast.error(err.response?.data?.message || `Failed to ${approvalAction} gate pass`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getAttendanceColor = (percentage) => {
@@ -48,6 +95,15 @@ function GatePassApproval() {
     if (percentage >= 75) return 'text-orange-600 bg-orange-50';
     return 'text-red-600 bg-red-50';
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading gate pass requests..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadGatePassRequests} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -361,15 +417,17 @@ function GatePassApproval() {
                     <button
                       type="button"
                       onClick={() => setShowApprovalModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium`}
+                      disabled={submitting}
+                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-orange-600'} text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      Confirm {approvalAction === 'approve' ? 'Approval' : 'Rejection'}
+                      {submitting ? 'Processing...' : `Confirm ${approvalAction === 'approve' ? 'Approval' : 'Rejection'}`}
                     </button>
                   </div>
                 </form>

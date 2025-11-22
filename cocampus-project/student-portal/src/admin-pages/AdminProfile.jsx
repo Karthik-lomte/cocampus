@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User,
@@ -21,75 +21,112 @@ import {
   Clock,
   Briefcase
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const AdminProfile = () => {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [updating, setUpdating] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [profile, setProfile] = useState({
-    name: 'Dr. Ramesh Kumar',
-    designation: 'System Administrator',
-    employeeId: 'ADM2018001',
-    email: 'admin@university.edu',
-    phone: '+91 9876543200',
-    office: 'Admin Block, Room 101',
-    department: 'Administration',
-    joinDate: '2018-06-15',
-    avatar: null
-  });
-
-  const [editForm, setEditForm] = useState({ ...profile });
+  const [profile, setProfile] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
 
-  const statistics = {
-    managedUsers: 4250,
-    totalDepartments: 8,
-    pendingApprovals: 15,
-    resolvedIssues: 234,
-    activeYears: new Date().getFullYear() - 2018
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getProfile();
+      setProfile(data);
+      setEditForm(data);
+    } catch (err) {
+      console.error('Profile error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentActivity = [
-    { id: 1, action: 'Approved leave request', target: 'Dr. Priya Sharma', time: '10 minutes ago' },
-    { id: 2, action: 'Added new user', target: 'Rahul Kumar (Student)', time: '1 hour ago' },
-    { id: 3, action: 'Published notice', target: 'Exam Schedule 2024', time: '2 hours ago' },
-    { id: 4, action: 'Updated fee structure', target: 'CSE Department', time: '5 hours ago' },
-    { id: 5, action: 'Reset password', target: 'Faculty Member', time: '1 day ago' }
-  ];
-
-  const handleEditProfile = (e) => {
+  const handleEditProfile = async (e) => {
     e.preventDefault();
-    setProfile({ ...editForm });
-    setShowEditModal(false);
-    alert('Profile updated successfully!');
+    try {
+      setUpdating(true);
+      const updated = await adminService.updateProfile(editForm);
+      setProfile(updated);
+      setShowEditModal(false);
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      console.error('Update profile error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('New passwords do not match!');
+      toast.error('New passwords do not match!');
       return;
     }
     if (passwordForm.newPassword.length < 8) {
-      alert('Password must be at least 8 characters long!');
+      toast.error('Password must be at least 8 characters long!');
       return;
     }
-    setShowPasswordModal(false);
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    alert('Password changed successfully!');
+    try {
+      setChangingPassword(true);
+      await adminService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+      setShowPasswordModal(false);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password changed successfully!');
+    } catch (err) {
+      console.error('Change password error:', err);
+      toast.error(err.response?.data?.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const openEditModal = () => {
     setEditForm({ ...profile });
     setShowEditModal(true);
   };
+
+  if (loading) return <Loading fullScreen message="Loading admin profile..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
+  if (!profile) return null;
+
+  const statistics = profile.statistics || {
+    managedUsers: 0,
+    totalDepartments: 0,
+    pendingApprovals: 0,
+    resolvedIssues: 0,
+    activeYears: 0
+  };
+
+  const recentActivity = profile.recentActivity || [];
 
   return (
     <div className="space-y-6">
@@ -385,16 +422,18 @@ const AdminProfile = () => {
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={updating}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center"
+                    disabled={updating}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {updating ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
@@ -492,15 +531,17 @@ const AdminProfile = () => {
                   <button
                     type="button"
                     onClick={() => setShowPasswordModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={changingPassword}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={changingPassword}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Update Password
+                    {changingPassword ? 'Updating...' : 'Update Password'}
                   </button>
                 </div>
               </form>

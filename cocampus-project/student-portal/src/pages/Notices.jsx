@@ -1,25 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Pin, Download, Calendar } from 'lucide-react';
-import { notices, getPinnedNotices, getNoticePriorityColor } from '../data/noticesData';
+import { studentService } from '../services/studentService';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const Notices = () => {
+  const [noticesData, setNoticesData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const pinnedNotices = getPinnedNotices();
 
-  const categories = [
-    'all',
-    'Academic notices',
-    'Examination updates',
-    'Fee reminders',
-    'Event announcements',
-    'Placement notifications',
-    'General circulars'
-  ];
+  useEffect(() => {
+    loadNotices();
+  }, []);
 
+  const loadNotices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getNotices();
+      setNoticesData(data);
+    } catch (err) {
+      console.error('Notices error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading notices..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadNotices} fullScreen />;
+
+  const categories = ['all', 'Academic', 'Examination', 'Fee', 'Event', 'Placement', 'General'];
+  const pinnedNotices = noticesData?.notices?.filter(n => n.isPinned) || [];
+  const allNotices = noticesData?.notices || [];
   const filteredNotices = selectedCategory === 'all'
-    ? notices
-    : notices.filter(n => n.category === selectedCategory);
+    ? allNotices
+    : allNotices.filter(n => n.category?.toLowerCase() === selectedCategory.toLowerCase());
+
+  const getNoticePriorityColor = (priority) => {
+    const colors = {
+      high: 'bg-red-100 text-red-700',
+      medium: 'bg-yellow-100 text-yellow-700',
+      low: 'bg-blue-100 text-blue-700'
+    };
+    return colors[priority?.toLowerCase()] || 'bg-gray-100 text-gray-700';
+  };
 
   return (
     <div className="space-y-6">
@@ -54,7 +81,7 @@ const Notices = () => {
           </h2>
           {pinnedNotices.map((notice, index) => (
             <motion.div
-              key={notice.id}
+              key={notice._id || notice.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
@@ -64,7 +91,7 @@ const Notices = () => {
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${getNoticePriorityColor(notice.priority)}`}>
-                      {notice.priority} Priority
+                      {notice.priority || 'medium'} Priority
                     </span>
                     <span className="text-sm text-gray-600">{notice.category}</span>
                   </div>
@@ -72,15 +99,15 @@ const Notices = () => {
                 </div>
                 <Pin className="text-red-500" size={24} />
               </div>
-              <p className="text-gray-700 mb-3">{notice.content}</p>
+              <p className="text-gray-700 mb-3">{notice.content || notice.description}</p>
               <div className="flex items-center justify-between text-sm text-gray-500">
                 <span className="flex items-center">
                   <Calendar size={14} className="mr-1" />
-                  {new Date(notice.date).toLocaleString()}
+                  {new Date(notice.date || notice.createdAt).toLocaleString()}
                 </span>
-                <span>Posted by: {notice.postedBy}</span>
+                <span>Posted by: {notice.postedBy || 'Admin'}</span>
               </div>
-              {notice.attachments.length > 0 && (
+              {notice.attachments?.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {notice.attachments.map((file, idx) => (
                     <button
@@ -88,7 +115,7 @@ const Notices = () => {
                       className="px-3 py-1 bg-white border border-red-300 text-red-700 rounded-lg text-sm hover:bg-red-50 flex items-center"
                     >
                       <Download size={14} className="mr-1" />
-                      {file}
+                      {file.name || file}
                     </button>
                   ))}
                 </div>
@@ -104,9 +131,9 @@ const Notices = () => {
           <Bell className="mr-2 text-blue-500" size={20} />
           All Notices
         </h2>
-        {filteredNotices.map((notice, index) => (
+        {filteredNotices.filter(n => !n.isPinned).map((notice, index) => (
           <motion.div
-            key={notice.id}
+            key={notice._id || notice.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
@@ -116,22 +143,22 @@ const Notices = () => {
               <div className="flex-1">
                 <div className="flex items-center space-x-2 mb-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${getNoticePriorityColor(notice.priority)}`}>
-                    {notice.priority} Priority
+                    {notice.priority || 'medium'} Priority
                   </span>
                   <span className="text-sm text-gray-600">{notice.category}</span>
                 </div>
                 <h3 className="text-xl font-bold text-gray-900">{notice.title}</h3>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">{notice.content}</p>
+            <p className="text-gray-700 mb-3">{notice.content || notice.description}</p>
             <div className="flex items-center justify-between text-sm text-gray-500">
               <span className="flex items-center">
                 <Calendar size={14} className="mr-1" />
-                {new Date(notice.date).toLocaleString()}
+                {new Date(notice.date || notice.createdAt).toLocaleString()}
               </span>
-              <span>Posted by: {notice.postedBy}</span>
+              <span>Posted by: {notice.postedBy || 'Admin'}</span>
             </div>
-            {notice.attachments.length > 0 && (
+            {notice.attachments?.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {notice.attachments.map((file, idx) => (
                   <button
@@ -139,7 +166,7 @@ const Notices = () => {
                     className="px-3 py-1 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-100 flex items-center"
                   >
                     <Download size={14} className="mr-1" />
-                    {file}
+                    {file.name || file}
                   </button>
                 ))}
               </div>

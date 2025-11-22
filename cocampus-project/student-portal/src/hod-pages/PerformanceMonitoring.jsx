@@ -1,14 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, BarChart3, Users, Award, AlertTriangle,
   Calendar, BookOpen, Target, Filter
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function PerformanceMonitoring() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Performance Data State
+  const [performanceData, setPerformanceData] = useState({
+    classWise: [],
+    subjectWise: []
+  });
+
   const [viewType, setViewType] = useState('classwise');
-  const { performanceData } = hodData;
+
+  // Load Performance Data
+  useEffect(() => {
+    loadPerformanceData();
+  }, []);
+
+  const loadPerformanceData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getPerformanceReport();
+      setPerformanceData(data.performanceData || data || { classWise: [], subjectWise: [] });
+    } catch (err) {
+      console.error('Error loading performance data:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPerformanceColor = (percentage) => {
     if (percentage >= 80) return 'text-green-600 bg-green-50';
@@ -22,10 +55,21 @@ function PerformanceMonitoring() {
     return 'bg-red-500';
   };
 
-  const totalStudents = performanceData.classWise.reduce((sum, cls) => sum + cls.students, 0);
-  const totalToppers = performanceData.classWise.reduce((sum, cls) => sum + cls.toppers, 0);
-  const totalNeedsAttention = performanceData.classWise.reduce((sum, cls) => sum + cls.needsAttention, 0);
-  const avgPerformance = (performanceData.classWise.reduce((sum, cls) => sum + cls.avgPercentage, 0) / performanceData.classWise.length).toFixed(1);
+  const totalStudents = performanceData.classWise?.reduce((sum, cls) => sum + (cls.students || 0), 0) || 0;
+  const totalToppers = performanceData.classWise?.reduce((sum, cls) => sum + (cls.toppers || 0), 0) || 0;
+  const totalNeedsAttention = performanceData.classWise?.reduce((sum, cls) => sum + (cls.needsAttention || 0), 0) || 0;
+  const avgPerformance = performanceData.classWise?.length > 0
+    ? (performanceData.classWise.reduce((sum, cls) => sum + (cls.avgPercentage || 0), 0) / performanceData.classWise.length).toFixed(1)
+    : '0.0';
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading performance data..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadPerformanceData} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

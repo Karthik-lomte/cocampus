@@ -1,8 +1,41 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus, Award, Users, GraduationCap, DollarSign } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function Performance() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [principalData, setPrincipalData] = useState({ institutionStats: {}, performanceMetrics: [] });
+
+  useEffect(() => {
+    loadPerformance();
+  }, []);
+
+  const loadPerformance = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getDashboard();
+      setPrincipalData({
+        institutionStats: data.institutionStats || {},
+        performanceMetrics: data.performanceMetrics || []
+      });
+    } catch (err) {
+      console.error('Error loading performance:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading performance analytics..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadPerformance} fullScreen />;
+
   const getTrendIcon = (trend) => {
     if (trend === 'up') return <TrendingUp size={16} className="text-green-600" />;
     if (trend === 'down') return <TrendingDown size={16} className="text-red-600" />;

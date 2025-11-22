@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -13,40 +14,50 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const AdminDashboard = () => {
-  const stats = {
-    totalStudents: 4250,
-    totalFaculty: 185,
-    departments: 8,
-    feeCollected: 2.8,
-    pendingApprovals: 15,
-    activeEvents: 6
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dashboardData, setDashboardData] = useState(null);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getDashboard();
+      setDashboardData(data);
+    } catch (err) {
+      console.error('Dashboard error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentActivities = [
-    { id: 1, type: 'user', message: 'New faculty added: Dr. Rajesh Kumar', time: '10 minutes ago', status: 'success' },
-    { id: 2, type: 'approval', message: 'Principal leave request pending', time: '30 minutes ago', status: 'warning' },
-    { id: 3, type: 'fee', message: 'Fee structure updated for 2024-25', time: '1 hour ago', status: 'success' },
-    { id: 4, type: 'notice', message: 'New notice published: Exam Schedule', time: '2 hours ago', status: 'info' },
-    { id: 5, type: 'booking', message: '3 sports booking requests pending', time: '3 hours ago', status: 'warning' }
-  ];
+  if (loading) return <Loading fullScreen message="Loading admin dashboard..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadDashboardData} fullScreen />;
 
-  const pendingTasks = [
-    { id: 1, task: 'Approve Principal leave request', priority: 'high', link: '/admin/approvals' },
-    { id: 2, task: 'Process 5 certificate requests', priority: 'medium', link: '/admin/approvals' },
-    { id: 3, task: 'Review sports booking requests', priority: 'medium', link: '/admin/approvals' },
-    { id: 4, task: 'Upload semester marks for CSE', priority: 'high', link: '/admin/academic' },
-    { id: 5, task: 'Update fee structure for new semester', priority: 'low', link: '/admin/fees' }
-  ];
+  const stats = dashboardData?.stats || {
+    totalStudents: 0,
+    totalFaculty: 0,
+    departments: 0,
+    feeCollected: 0,
+    pendingApprovals: 0,
+    activeEvents: 0
+  };
 
-  const departmentStats = [
-    { name: 'Computer Science', students: 850, faculty: 45, performance: 88 },
-    { name: 'Electronics', students: 620, faculty: 32, performance: 85 },
-    { name: 'Mechanical', students: 580, faculty: 30, performance: 82 },
-    { name: 'Civil', students: 450, faculty: 25, performance: 80 },
-    { name: 'Information Tech', students: 520, faculty: 28, performance: 86 }
-  ];
+  const recentActivities = dashboardData?.recentActivities || [];
+  const pendingTasks = dashboardData?.pendingTasks || [];
+  const departmentStats = dashboardData?.departmentStats || [];
 
   return (
     <div className="space-y-6">

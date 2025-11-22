@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Settings,
@@ -18,23 +18,34 @@ import {
   CheckCircle,
   Globe
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const SystemSettings = () => {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [activeSection, setActiveSection] = useState('institution');
   const [saveStatus, setSaveStatus] = useState('');
 
   // Institution Profile Settings
   const [institutionSettings, setInstitutionSettings] = useState({
-    name: 'ABC University of Technology',
-    shortName: 'ABCUT',
-    logo: '/logo.png',
-    address: '123 University Road, Tech Park, City - 500001',
-    email: 'info@abcut.edu.in',
-    phone: '+91 40 1234 5678',
-    website: 'www.abcut.edu.in',
-    establishedYear: '1995',
-    affiliatedTo: 'State University',
-    accreditation: 'NAAC A++'
+    name: '',
+    shortName: '',
+    logo: '',
+    address: '',
+    email: '',
+    phone: '',
+    website: '',
+    establishedYear: '',
+    affiliatedTo: '',
+    accreditation: ''
   });
 
   // Academic Settings
@@ -83,15 +94,84 @@ const SystemSettings = () => {
     { id: 'security', label: 'Security Settings', icon: Shield }
   ];
 
-  const handleSave = (section) => {
-    setSaveStatus('saving');
-    // Simulate save operation
-    setTimeout(() => {
-      setSaveStatus('saved');
-      alert(`${section} settings saved successfully!`);
-      setTimeout(() => setSaveStatus(''), 2000);
-    }, 1000);
+  // Load Settings from Backend
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getSettings();
+
+      // Update all settings states
+      if (data.institution) {
+        setInstitutionSettings(data.institution);
+      }
+      if (data.academic) {
+        setAcademicSettings(data.academic);
+      }
+      if (data.notifications) {
+        setNotificationSettings(data.notifications);
+      }
+      if (data.security) {
+        setSecuritySettings(data.security);
+      }
+    } catch (err) {
+      console.error('Error loading settings:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async (section) => {
+    try {
+      setSubmitting(true);
+      setSaveStatus('saving');
+
+      let settingsData = {};
+
+      // Prepare data based on active section
+      switch (activeSection) {
+        case 'institution':
+          settingsData = { institution: institutionSettings };
+          break;
+        case 'academic':
+          settingsData = { academic: academicSettings };
+          break;
+        case 'notifications':
+          settingsData = { notifications: notificationSettings };
+          break;
+        case 'security':
+          settingsData = { security: securitySettings };
+          break;
+        default:
+          break;
+      }
+
+      await adminService.updateSettings(settingsData);
+      setSaveStatus('saved');
+      toast.success(`${section} saved successfully!`);
+      setTimeout(() => setSaveStatus(''), 2000);
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setSaveStatus('');
+      toast.error(err.response?.data?.message || 'Failed to save settings');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading system settings..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadSettings} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -270,10 +350,11 @@ const SystemSettings = () => {
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
                     onClick={() => handleSave('Institution Profile')}
-                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -410,10 +491,11 @@ const SystemSettings = () => {
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
                     onClick={() => handleSave('Academic Settings')}
-                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -520,10 +602,11 @@ const SystemSettings = () => {
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
                     onClick={() => handleSave('Notification Settings')}
-                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -677,10 +760,11 @@ const SystemSettings = () => {
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
                     onClick={() => handleSave('Security Settings')}
-                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>

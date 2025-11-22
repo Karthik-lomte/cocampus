@@ -1,22 +1,55 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, Grid, List, X } from 'lucide-react';
-import { academicCalendarData } from '../data/academicCalendarData';
+import { studentService } from '../services/studentService';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AcademicCalendar() {
+  const [calendarData, setCalendarData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [view, setView] = useState('month'); // month, list
+  const [view, setView] = useState('month');
 
-  // Get events for the current month
+  useEffect(() => {
+    loadCalendar();
+  }, []);
+
+  const loadCalendar = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getAcademicCalendar();
+      setCalendarData(data);
+    } catch (err) {
+      console.error('Calendar error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading calendar..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadCalendar} fullScreen />;
+
+  const events = calendarData?.events || [];
+  const categories = calendarData?.categories || [
+    { value: 'all', name: 'All Events', color: '#3B82F6' },
+    { value: 'exam', name: 'Exams', color: '#EF4444' },
+    { value: 'holiday', name: 'Holidays', color: '#10B981' },
+    { value: 'event', name: 'Events', color: '#F59E0B' }
+  ];
+
   const getEventsForMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    return academicCalendarData.events.filter(event => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
+    return events.filter(event => {
+      const eventStart = new Date(event.startDate || event.start);
+      const eventEnd = new Date(event.endDate || event.end);
       const monthStart = new Date(year, month, 1);
       const monthEnd = new Date(year, month + 1, 0);
 
@@ -30,7 +63,6 @@ function AcademicCalendar() {
     );
   };
 
-  // Generate calendar days
   const generateCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -41,24 +73,20 @@ function AcademicCalendar() {
 
     const days = [];
 
-    // Add empty cells for days before the first of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
 
-    // Add days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dateStr = date.toISOString().split('T')[0];
 
-      // Find events for this day
       const dayEvents = getEventsForMonth().filter(event => {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
+        const eventStart = new Date(event.startDate || event.start);
+        const eventEnd = new Date(event.endDate || event.end);
         return date >= eventStart && date <= eventEnd;
       });
 
-      days.push({ day, date: dateStr, events: dayEvents });
+      days.push({ day, date: date.toISOString().split('T')[0], events: dayEvents });
     }
 
     return days;
@@ -76,7 +104,6 @@ function AcademicCalendar() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -86,7 +113,6 @@ function AcademicCalendar() {
         <p className="text-gray-600">View all academic events, exams, and important dates</p>
       </motion.div>
 
-      {/* Controls */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -94,7 +120,6 @@ function AcademicCalendar() {
         className="bg-white rounded-xl shadow-md p-4 mb-6"
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Month Navigation */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => changeMonth(-1)}
@@ -113,7 +138,6 @@ function AcademicCalendar() {
             </button>
           </div>
 
-          {/* View Toggle */}
           <div className="flex gap-2">
             <button
               onClick={() => setView('month')}
@@ -140,9 +164,8 @@ function AcademicCalendar() {
           </div>
         </div>
 
-        {/* Category Filter */}
         <div className="flex flex-wrap gap-2 mt-4">
-          {academicCalendarData.categories.map((category) => (
+          {categories.map((category) => (
             <button
               key={category.value}
               onClick={() => setSelectedCategory(category.value)}
@@ -161,14 +184,12 @@ function AcademicCalendar() {
         </div>
       </motion.div>
 
-      {/* Calendar View */}
       {view === 'month' && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="bg-white rounded-xl shadow-md overflow-hidden"
         >
-          {/* Day Headers */}
           <div className="grid grid-cols-7 bg-gray-50 border-b">
             {dayNames.map(day => (
               <div key={day} className="p-3 text-center font-semibold text-gray-700 text-sm">
@@ -177,7 +198,6 @@ function AcademicCalendar() {
             ))}
           </div>
 
-          {/* Calendar Grid */}
           <div className="grid grid-cols-7">
             {generateCalendarDays().map((day, index) => (
               <motion.div
@@ -195,16 +215,19 @@ function AcademicCalendar() {
                       {day.day}
                     </div>
                     <div className="space-y-1">
-                      {day.events.slice(0, 2).map((event, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setSelectedEvent(event)}
-                          className="w-full text-left text-xs p-1 rounded truncate hover:shadow-md transition-shadow"
-                          style={{ backgroundColor: event.color, color: 'white' }}
-                        >
-                          {event.title}
-                        </button>
-                      ))}
+                      {day.events.slice(0, 2).map((event, i) => {
+                        const categoryObj = categories.find(c => c.value === event.category);
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedEvent(event)}
+                            className="w-full text-left text-xs p-1 rounded truncate hover:shadow-md transition-shadow"
+                            style={{ backgroundColor: categoryObj?.color || '#3B82F6', color: 'white' }}
+                          >
+                            {event.title || event.name}
+                          </button>
+                        );
+                      })}
                       {day.events.length > 2 && (
                         <div className="text-xs text-gray-500 pl-1">
                           +{day.events.length - 2} more
@@ -219,7 +242,6 @@ function AcademicCalendar() {
         </motion.div>
       )}
 
-      {/* List View */}
       {view === 'list' && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -233,48 +255,50 @@ function AcademicCalendar() {
             </div>
           ) : (
             <div className="divide-y">
-              {filteredEvents.sort((a, b) => new Date(a.start) - new Date(b.start)).map((event, index) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => setSelectedEvent(event)}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="w-16 h-16 rounded-lg flex flex-col items-center justify-center text-white flex-shrink-0"
-                      style={{ backgroundColor: event.color }}
-                    >
-                      <div className="text-xs font-medium">
-                        {new Date(event.start).toLocaleDateString('en-US', { month: 'short' })}
+              {filteredEvents.sort((a, b) => new Date(a.startDate || a.start) - new Date(b.startDate || b.start)).map((event, index) => {
+                const categoryObj = categories.find(c => c.value === event.category);
+                return (
+                  <motion.div
+                    key={event._id || event.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => setSelectedEvent(event)}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div
+                        className="w-16 h-16 rounded-lg flex flex-col items-center justify-center text-white flex-shrink-0"
+                        style={{ backgroundColor: categoryObj?.color || '#3B82F6' }}
+                      >
+                        <div className="text-xs font-medium">
+                          {new Date(event.startDate || event.start).toLocaleDateString('en-US', { month: 'short' })}
+                        </div>
+                        <div className="text-2xl font-bold">
+                          {new Date(event.startDate || event.start).getDate()}
+                        </div>
                       </div>
-                      <div className="text-2xl font-bold">
-                        {new Date(event.start).getDate()}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 mb-1">{event.title || event.name}</h3>
+                        <p className="text-sm text-gray-600 mb-2">{event.description}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                          <span className="px-2 py-1 bg-gray-100 rounded capitalize">
+                            {event.category}
+                          </span>
+                          <span>
+                            {new Date(event.startDate || event.start).toLocaleDateString()} - {new Date(event.endDate || event.end).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 mb-1">{event.title}</h3>
-                      <p className="text-sm text-gray-600 mb-2">{event.description}</p>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                        <span className="px-2 py-1 bg-gray-100 rounded">
-                          {event.category}
-                        </span>
-                        <span>
-                          {new Date(event.start).toLocaleDateString()} - {new Date(event.end).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </motion.div>
       )}
 
-      {/* Event Detail Modal */}
       <AnimatePresence>
         {selectedEvent && (
           <motion.div
@@ -293,12 +317,12 @@ function AcademicCalendar() {
             >
               <div
                 className="p-6 text-white"
-                style={{ backgroundColor: selectedEvent.color }}
+                style={{ backgroundColor: categories.find(c => c.value === selectedEvent.category)?.color || '#3B82F6' }}
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="text-sm opacity-90 mb-1">{selectedEvent.category}</div>
-                    <h2 className="text-2xl font-bold">{selectedEvent.title}</h2>
+                    <div className="text-sm opacity-90 mb-1 capitalize">{selectedEvent.category}</div>
+                    <h2 className="text-2xl font-bold">{selectedEvent.title || selectedEvent.name}</h2>
                   </div>
                   <button
                     onClick={() => setSelectedEvent(null)}
@@ -317,14 +341,14 @@ function AcademicCalendar() {
                   <div>
                     <div className="text-sm font-semibold text-gray-500 mb-1">Duration</div>
                     <p className="text-gray-900">
-                      {new Date(selectedEvent.start).toLocaleDateString('en-US', {
+                      {new Date(selectedEvent.startDate || selectedEvent.start).toLocaleDateString('en-US', {
                         weekday: 'long',
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric'
                       })}
-                      {selectedEvent.start !== selectedEvent.end && (
-                        <> to {new Date(selectedEvent.end).toLocaleDateString('en-US', {
+                      {(selectedEvent.startDate || selectedEvent.start) !== (selectedEvent.endDate || selectedEvent.end) && (
+                        <> to {new Date(selectedEvent.endDate || selectedEvent.end).toLocaleDateString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
                           month: 'long',

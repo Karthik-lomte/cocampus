@@ -1,8 +1,42 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Award, Calendar, Briefcase, GraduationCap, Building2, Users } from 'lucide-react';
-import { principalData } from '../principal-data/principalData';
+import { principalService } from '../services/principalService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function PrincipalProfile() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [profile, setProfile] = useState({});
+  const [institutionStats, setInstitutionStats] = useState({});
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await principalService.getDashboard();
+      setProfile(data.profile || {});
+      setInstitutionStats(data.institutionStats || {});
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading profile..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
+
+  const principalData = { profile, institutionStats };
+
   return (
     <div className="space-y-6">
       <div>

@@ -1,17 +1,67 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Server, Monitor, Wrench, DollarSign, TrendingUp,
   AlertCircle, CheckCircle, Settings, Package, Edit2, X
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function ResourceManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Resources Data
+  const [resources, setResources] = useState({
+    laboratories: [],
+    equipment: [],
+    budgetAllocation: {
+      total: 0,
+      utilized: 0,
+      pending: 0,
+      categories: []
+    }
+  });
+
+  // UI States
   const [viewType, setViewType] = useState('labs');
-  const { resources } = hodData;
   const [showEditModal, setShowEditModal] = useState(false);
   const [editType, setEditType] = useState(''); // 'lab', 'equipment', 'budget'
   const [editData, setEditData] = useState(null);
+
+  // Load Resources
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  const loadResources = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getResources();
+      setResources(data.resources || data || {
+        laboratories: [],
+        equipment: [],
+        budgetAllocation: {
+          total: 0,
+          utilized: 0,
+          pending: 0,
+          categories: []
+        }
+      });
+    } catch (err) {
+      console.error('Error loading resources:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     const colors = {
@@ -31,12 +81,6 @@ function ResourceManagement() {
     const Icon = icons[status] || CheckCircle;
     return Icon;
   };
-
-  const totalSystems = resources.laboratories.reduce((sum, lab) => sum + lab.systems, 0);
-  const functionalSystems = resources.laboratories.reduce((sum, lab) => sum + lab.functional, 0);
-  const functionalPercentage = ((functionalSystems / totalSystems) * 100).toFixed(1);
-
-  const budgetUtilizedPercentage = ((resources.budgetAllocation.utilized / resources.budgetAllocation.total) * 100).toFixed(1);
 
   const handleEditLab = (lab) => {
     setEditType('lab');
@@ -59,11 +103,33 @@ function ResourceManagement() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
-    alert(`${editType.charAt(0).toUpperCase() + editType.slice(1)} updated successfully!`);
-    setShowEditModal(false);
-    setEditData(null);
+
+    try {
+      setSubmitting(true);
+
+      // Prepare data based on edit type
+      let updateData = { ...editData };
+      if (editType === 'lab' && typeof editData.software === 'string') {
+        updateData.software = editData.software.split(',').map(s => s.trim());
+      }
+
+      await hodService.updateResource(editData.id, {
+        type: editType,
+        data: updateData
+      });
+
+      toast.success(`${editType.charAt(0).toUpperCase() + editType.slice(1)} updated successfully!`);
+      await loadResources();
+      setShowEditModal(false);
+      setEditData(null);
+    } catch (err) {
+      console.error('Error updating resource:', err);
+      toast.error(err.response?.data?.message || `Failed to update ${editType}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEditFieldChange = (field, value) => {
@@ -72,6 +138,24 @@ function ResourceManagement() {
       [field]: value
     }));
   };
+
+  // Null-safe calculations
+  const totalSystems = resources.laboratories?.reduce((sum, lab) => sum + (lab.systems || 0), 0) || 0;
+  const functionalSystems = resources.laboratories?.reduce((sum, lab) => sum + (lab.functional || 0), 0) || 0;
+  const functionalPercentage = totalSystems > 0 ? ((functionalSystems / totalSystems) * 100).toFixed(1) : '0.0';
+
+  const budgetUtilizedPercentage = resources.budgetAllocation?.total > 0
+    ? ((resources.budgetAllocation.utilized / resources.budgetAllocation.total) * 100).toFixed(1)
+    : '0.0';
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading resource management..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadResources} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -627,15 +711,17 @@ function ResourceManagement() {
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Changes
+                      {submitting ? 'Saving...' : 'Save Changes'}
                     </button>
                   </div>
                 </form>

@@ -1,17 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Save, Download } from 'lucide-react';
-import { facultyData } from '../faculty-data/facultyData';
-import { studentsData } from '../faculty-data/studentsData';
+import { facultyService } from '../services/facultyService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function MarksUpload() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [examsData, setExamsData] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [evaluationType, setEvaluationType] = useState('');
   const [marks, setMarks] = useState({});
 
-  const classes = ['CSE-3A', 'CSE-3B', 'CSE-4A'];
-  const evaluationTypes = [
+  useEffect(() => {
+    loadExamsData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedClass) {
+      loadStudents();
+    } else {
+      setStudents([]);
+      setMarks({});
+    }
+  }, [selectedClass]);
+
+  const loadExamsData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await facultyService.getExams();
+      setExamsData(data);
+    } catch (err) {
+      console.error('Exams data error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStudents = async () => {
+    try {
+      setLoadingStudents(true);
+      const data = await facultyService.getStudents({ class: selectedClass });
+      setStudents(data.students || data || []);
+      setMarks({});
+    } catch (err) {
+      console.error('Students error:', err);
+      toast.error('Failed to load students');
+      setStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const classes = examsData?.classes || [];
+  const subjects = examsData?.subjects || [];
+  const evaluationTypes = examsData?.evaluationTypes || [
     { value: 'mid1', label: 'Mid-1 Exam', maxMarks: 30 },
     { value: 'mid2', label: 'Mid-2 Exam', maxMarks: 30 },
     { value: 'internal', label: 'Internal Assessment', maxMarks: 40 },
@@ -19,7 +72,6 @@ function MarksUpload() {
     { value: 'lab', label: 'Lab Evaluation', maxMarks: 50 }
   ];
 
-  const students = selectedClass ? (studentsData[selectedClass] || []) : [];
   const maxMarks = evaluationTypes.find(e => e.value === evaluationType)?.maxMarks || 100;
 
   const handleMarksChange = (rollNo, value) => {
@@ -32,12 +84,45 @@ function MarksUpload() {
     }
   };
 
-  const handleSaveMarks = () => {
+  const handleSaveMarks = async () => {
     if (!selectedClass || !selectedSubject || !evaluationType) {
-      alert('Please select all fields');
+      toast.error('Please select class, subject, and evaluation type');
       return;
     }
-    alert(`Marks saved successfully for ${selectedClass} - ${selectedSubject}`);
+
+    const markedCount = Object.keys(marks).length;
+    if (markedCount === 0) {
+      toast.error('Please enter marks for at least one student');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Prepare marks data
+      const marksData = {
+        class: selectedClass,
+        subject: selectedSubject,
+        evaluationType,
+        maxMarks,
+        marks: Object.entries(marks).map(([rollNo, marksValue]) => ({
+          rollNo,
+          marks: parseFloat(marksValue)
+        }))
+      };
+
+      await facultyService.enterMarks(marksData);
+      toast.success(`Marks saved successfully for ${markedCount} student(s)!`);
+      setMarks({});
+      setSelectedClass('');
+      setSelectedSubject('');
+      setEvaluationType('');
+    } catch (err) {
+      console.error('Save marks error:', err);
+      toast.error(err.response?.data?.message || 'Failed to save marks');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -47,9 +132,12 @@ function MarksUpload() {
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      alert(`Uploading file: ${file.name}`);
+      toast.info(`Bulk upload feature coming soon: ${file.name}`);
     }
   };
+
+  if (loading) return <Loading fullScreen message="Loading marks upload..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadExamsData} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -135,9 +223,9 @@ function MarksUpload() {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">Select Subject</option>
-              {facultyData.assignedSubjects.map(subject => (
-                <option key={subject.code} value={subject.code}>
-                  {subject.name}
+              {subjects.map(subject => (
+                <option key={subject._id || subject.code} value={subject.code || subject.subjectCode}>
+                  {subject.name || subject.subjectName}
                 </option>
               ))}
             </select>
@@ -176,101 +264,128 @@ function MarksUpload() {
             </div>
             <button
               onClick={handleSaveMarks}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+              disabled={saving || loadingStudents}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={20} />
-              Save Marks
+              {saving ? 'Saving...' : 'Save Marks'}
             </button>
           </div>
 
           {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marks (out of {maxMarks})</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {students.map((student, index) => {
-                  const studentMarks = marks[student.rollNo] || '';
-                  const percentage = studentMarks ? ((studentMarks / maxMarks) * 100).toFixed(1) : '-';
-                  return (
-                    <motion.tr
-                      key={student.rollNo}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{student.rollNo}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{student.name}</td>
-                      <td className="px-6 py-4">
-                        <input
-                          type="number"
-                          min="0"
-                          max={maxMarks}
-                          step="0.5"
-                          value={studentMarks}
-                          onChange={(e) => handleMarksChange(student.rollNo, e.target.value)}
-                          placeholder={`0 - ${maxMarks}`}
-                          className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-sm font-semibold ${
-                          percentage >= 75 ? 'text-green-600' : percentage >= 40 ? 'text-orange-600' : 'text-red-600'
-                        }`}>
-                          {percentage}%
-                        </span>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {loadingStudents ? (
+              <div className="p-8 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-gray-600">Loading students...</p>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <p>No students found for this class</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marks (out of {maxMarks})</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {students.map((student, index) => {
+                    const rollNo = student.rollNo || student.rollNumber;
+                    const studentName = student.name || student.studentName;
+                    const studentMarks = marks[rollNo] || '';
+                    const percentage = studentMarks ? ((studentMarks / maxMarks) * 100).toFixed(1) : '-';
+                    return (
+                      <motion.tr
+                        key={rollNo || index}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{rollNo}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{studentName}</td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            max={maxMarks}
+                            step="0.5"
+                            value={studentMarks}
+                            onChange={(e) => handleMarksChange(rollNo, e.target.value)}
+                            placeholder={`0 - ${maxMarks}`}
+                            className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-sm font-semibold ${
+                            percentage >= 75 ? 'text-green-600' : percentage >= 40 ? 'text-orange-600' : 'text-red-600'
+                          }`}>
+                            {percentage}%
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-gray-200">
-            {students.map((student, index) => {
-              const studentMarks = marks[student.rollNo] || '';
-              const percentage = studentMarks ? ((studentMarks / maxMarks) * 100).toFixed(1) : '-';
-              return (
-                <motion.div
-                  key={student.rollNo}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-4"
-                >
-                  <div className="mb-3">
-                    <h3 className="font-semibold text-gray-900">{student.name}</h3>
-                    <p className="text-sm text-gray-600">{student.rollNo}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      min="0"
-                      max={maxMarks}
-                      step="0.5"
-                      value={studentMarks}
-                      onChange={(e) => handleMarksChange(student.rollNo, e.target.value)}
-                      placeholder={`0 - ${maxMarks}`}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                    <span className={`font-semibold ${
-                      percentage >= 75 ? 'text-green-600' : percentage >= 40 ? 'text-orange-600' : 'text-red-600'
-                    }`}>
-                      {percentage}%
-                    </span>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {loadingStudents ? (
+              <div className="p-8 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-gray-600">Loading students...</p>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <p>No students found for this class</p>
+              </div>
+            ) : (
+              students.map((student, index) => {
+                const rollNo = student.rollNo || student.rollNumber;
+                const studentName = student.name || student.studentName;
+                const studentMarks = marks[rollNo] || '';
+                const percentage = studentMarks ? ((studentMarks / maxMarks) * 100).toFixed(1) : '-';
+                return (
+                  <motion.div
+                    key={rollNo || index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4"
+                  >
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-gray-900">{studentName}</h3>
+                      <p className="text-sm text-gray-600">{rollNo}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="0"
+                        max={maxMarks}
+                        step="0.5"
+                        value={studentMarks}
+                        onChange={(e) => handleMarksChange(rollNo, e.target.value)}
+                        placeholder={`0 - ${maxMarks}`}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <span className={`font-semibold ${
+                        percentage >= 75 ? 'text-green-600' : percentage >= 40 ? 'text-orange-600' : 'text-red-600'
+                      }`}>
+                        {percentage}%
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </motion.div>
       )}

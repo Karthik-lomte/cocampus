@@ -1,8 +1,17 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Clock, MapPin, Users, BookOpen } from 'lucide-react';
-import { scheduleData } from '../faculty-data/scheduleData';
+import { facultyService } from '../services/facultyService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function FacultyTimetable() {
+  const toast = useToast();
+  const [timetableData, setTimetableData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '9:00 - 9:50',
@@ -15,9 +24,28 @@ function FacultyTimetable() {
     '4:00 - 4:50'
   ];
 
+  useEffect(() => {
+    loadTimetable();
+  }, []);
+
+  const loadTimetable = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await facultyService.getTimetable();
+      setTimetableData(data);
+    } catch (err) {
+      console.error('Timetable error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getClassForSlot = (day, time) => {
-    const daySchedule = scheduleData.weeklySchedule[day] || [];
-    return daySchedule.find(cls => cls.time === time);
+    if (!timetableData?.weeklySchedule) return null;
+    const daySchedule = timetableData.weeklySchedule[day] || [];
+    return daySchedule.find(cls => cls.time === time || `${cls.startTime} - ${cls.endTime}` === time);
   };
 
   const getClassColor = (type) => {
@@ -30,6 +58,12 @@ function FacultyTimetable() {
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     return day === today;
   };
+
+  if (loading) return <Loading fullScreen message="Loading timetable..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadTimetable} fullScreen />;
+
+  const todayClasses = timetableData?.todayClasses || [];
+  const weeklySchedule = timetableData?.weeklySchedule || {};
 
   return (
     <div className="space-y-6">
@@ -44,7 +78,7 @@ function FacultyTimetable() {
           <h1 className="text-3xl font-bold">My Timetable</h1>
         </div>
         <p className="text-green-100">Weekly class schedule</p>
-        <p className="text-green-100 mt-1">{scheduleData.today}</p>
+        <p className="text-green-100 mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </motion.div>
 
       {/* Today's Classes Quick View */}
@@ -56,37 +90,44 @@ function FacultyTimetable() {
       >
         <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-green-50 to-teal-50">
           <h2 className="text-xl font-bold text-gray-900">Today's Classes</h2>
-          <p className="text-gray-600 text-sm">{scheduleData.todayClasses.length} classes scheduled</p>
+          <p className="text-gray-600 text-sm">{todayClasses.length} classes scheduled</p>
         </div>
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {scheduleData.todayClasses.map((cls, index) => (
-              <motion.div
-                key={cls.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.1 }}
-                className={`bg-gradient-to-r ${getClassColor(cls.type)} rounded-xl p-4 text-white`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock size={16} />
-                  <span className="text-sm font-medium">{cls.time}</span>
-                </div>
-                <h3 className="font-bold mb-1">{cls.subject}</h3>
-                <p className="text-sm opacity-90">{cls.class}</p>
-                <div className="mt-3 pt-3 border-t border-white border-opacity-20 flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1">
-                    <MapPin size={12} />
-                    {cls.room}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users size={12} />
-                    {cls.studentsCount}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          {todayClasses.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar size={48} className="mx-auto mb-4 text-gray-300" />
+              <p>No classes scheduled for today</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {todayClasses.map((cls, index) => (
+                <motion.div
+                  key={cls._id || cls.id || index}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`bg-gradient-to-r ${getClassColor(cls.type)} rounded-xl p-4 text-white`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock size={16} />
+                    <span className="text-sm font-medium">{cls.time || `${cls.startTime} - ${cls.endTime}`}</span>
+                  </div>
+                  <h3 className="font-bold mb-1">{cls.subject || cls.subjectName}</h3>
+                  <p className="text-sm opacity-90">{cls.class || cls.className}</p>
+                  <div className="mt-3 pt-3 border-t border-white border-opacity-20 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1">
+                      <MapPin size={12} />
+                      {cls.room}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users size={12} />
+                      {cls.studentsCount || cls.studentCount || 0}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -187,7 +228,7 @@ function FacultyTimetable() {
         className="lg:hidden space-y-4"
       >
         {days.map((day, dayIndex) => {
-          const dayClasses = scheduleData.weeklySchedule[day] || [];
+          const dayClasses = weeklySchedule[day] || [];
           return (
             <motion.div
               key={day}
@@ -275,25 +316,25 @@ function FacultyTimetable() {
             {[
               {
                 label: 'Total Classes',
-                value: Object.values(scheduleData.weeklySchedule).flat().length,
+                value: Object.values(weeklySchedule).flat().length,
                 icon: BookOpen,
                 color: 'blue'
               },
               {
                 label: 'Theory Classes',
-                value: Object.values(scheduleData.weeklySchedule).flat().filter(c => c.type === 'Theory').length,
+                value: Object.values(weeklySchedule).flat().filter(c => c.type === 'Theory').length,
                 icon: BookOpen,
                 color: 'cyan'
               },
               {
                 label: 'Lab Sessions',
-                value: Object.values(scheduleData.weeklySchedule).flat().filter(c => c.type === 'Lab').length,
+                value: Object.values(weeklySchedule).flat().filter(c => c.type === 'Lab').length,
                 icon: BookOpen,
                 color: 'purple'
               },
               {
                 label: 'Working Days',
-                value: Object.keys(scheduleData.weeklySchedule).length,
+                value: Object.keys(weeklySchedule).length,
                 icon: Calendar,
                 color: 'green'
               }

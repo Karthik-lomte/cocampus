@@ -1,38 +1,83 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { CreditCard, Download, DollarSign, CheckCircle, AlertCircle, Smartphone, Building as Bank } from 'lucide-react';
-import { feeData } from '../data/feeData';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function FeeManagement() {
+  const toast = useToast();
+  const [feeData, setFeeData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedFee, setSelectedFee] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [paying, setPaying] = useState(false);
+
+  useEffect(() => {
+    loadFees();
+  }, []);
+
+  const loadFees = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getFees();
+      setFeeData(data);
+    } catch (err) {
+      console.error('Fee error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePayNow = (fee) => {
     setSelectedFee(fee);
     setShowPaymentModal(true);
   };
 
-  const handlePayment = (e) => {
+  const handlePayment = async (e) => {
     e.preventDefault();
-    alert('Payment gateway integration would be handled here');
-    setShowPaymentModal(false);
-    setPaymentMethod('');
+    if (!paymentMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+
+    try {
+      setPaying(true);
+      await studentService.payFee(selectedFee._id || selectedFee.id, { paymentMethod });
+      toast.success(`Fee payment of ₹${selectedFee.amount} successful!`);
+      setShowPaymentModal(false);
+      setPaymentMethod('');
+      await loadFees();
+    } catch (err) {
+      console.error('Payment error:', err);
+      toast.error(err.response?.data?.message || 'Payment failed');
+    } finally {
+      setPaying(false);
+    }
   };
 
-  const getPaymentIcon = (method) => {
-    const icons = {
-      Smartphone: Smartphone,
-      CreditCard: CreditCard,
-      Building: Bank
-    };
-    const Icon = icons[method];
+  if (loading) return <Loading fullScreen message="Loading fees..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadFees} fullScreen />;
+
+  const paymentMethods = feeData?.paymentMethods || [
+    { value: 'upi', label: 'UPI Payment', icon: 'Smartphone', description: 'PhonePe, Google Pay, Paytm' },
+    { value: 'card', label: 'Credit/Debit Card', icon: 'CreditCard', description: 'Visa, MasterCard, RuPay' },
+    { value: 'netbanking', label: 'Net Banking', icon: 'Building', description: 'All major banks supported' }
+  ];
+
+  const getPaymentIcon = (iconName) => {
+    const icons = { Smartphone, CreditCard, Building: Bank };
+    const Icon = icons[iconName];
     return Icon ? <Icon size={20} /> : <CreditCard size={20} />;
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -42,7 +87,6 @@ function FeeManagement() {
         <p className="text-gray-600">View and pay your fees online</p>
       </motion.div>
 
-      {/* Fee Structure */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -51,37 +95,22 @@ function FeeManagement() {
       >
         <h2 className="text-2xl font-bold mb-4">Current Semester Fee Structure</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <div className="bg-white bg-opacity-20 rounded-lg p-4">
-            <div className="text-sm opacity-90">Tuition Fee</div>
-            <div className="text-2xl font-bold">₹{feeData.feeStructure.tuitionFee.toLocaleString()}</div>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-lg p-4">
-            <div className="text-sm opacity-90">Development</div>
-            <div className="text-2xl font-bold">₹{feeData.feeStructure.developmentFee.toLocaleString()}</div>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-lg p-4">
-            <div className="text-sm opacity-90">Exam Fee</div>
-            <div className="text-2xl font-bold">₹{feeData.feeStructure.examFee.toLocaleString()}</div>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-lg p-4">
-            <div className="text-sm opacity-90">Library</div>
-            <div className="text-2xl font-bold">₹{feeData.feeStructure.libraryFee.toLocaleString()}</div>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-lg p-4">
-            <div className="text-sm opacity-90">Sports</div>
-            <div className="text-2xl font-bold">₹{feeData.feeStructure.sportsFee.toLocaleString()}</div>
-          </div>
+          {feeData?.feeStructure && Object.entries(feeData.feeStructure).filter(([key]) => key !== 'total').map(([key, value]) => (
+            <div key={key} className="bg-white bg-opacity-20 rounded-lg p-4">
+              <div className="text-sm opacity-90 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+              <div className="text-2xl font-bold">₹{value?.toLocaleString()}</div>
+            </div>
+          ))}
         </div>
         <div className="mt-6 pt-4 border-t border-white border-opacity-30">
           <div className="flex justify-between items-center">
             <span className="text-xl font-semibold">Total Semester Fee</span>
-            <span className="text-3xl font-bold">₹{feeData.feeStructure.total.toLocaleString()}</span>
+            <span className="text-3xl font-bold">₹{feeData?.feeStructure?.total?.toLocaleString()}</span>
           </div>
         </div>
       </motion.div>
 
-      {/* Pending Fees */}
-      {feeData.pendingFees.length > 0 && (
+      {feeData?.pendingFees?.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -96,14 +125,14 @@ function FeeManagement() {
           </div>
           <div className="divide-y divide-gray-200">
             {feeData.pendingFees.map((fee) => (
-              <div key={fee.id} className="p-6">
+              <div key={fee._id || fee.id} className="p-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-1">{fee.semester}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{fee.feeType}</p>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">{fee.semester || 'Current Semester'}</h3>
+                    <p className="text-sm text-gray-600 mb-2">{fee.feeType || fee.type}</p>
                     <div className="flex flex-wrap gap-4 text-sm">
                       <span className="text-gray-600">
-                        Amount: <span className="font-semibold text-gray-900">₹{fee.amount.toLocaleString()}</span>
+                        Amount: <span className="font-semibold text-gray-900">₹{fee.amount?.toLocaleString()}</span>
                       </span>
                       <span className="text-gray-600">
                         Due Date: <span className="font-semibold text-red-600">{new Date(fee.dueDate).toLocaleDateString()}</span>
@@ -124,7 +153,6 @@ function FeeManagement() {
         </motion.div>
       )}
 
-      {/* Payment History */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -135,7 +163,6 @@ function FeeManagement() {
           <h2 className="text-xl font-bold text-gray-900">Payment History</h2>
         </div>
 
-        {/* Desktop View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -150,13 +177,13 @@ function FeeManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {feeData.paymentHistory.map((payment) => (
-                <tr key={payment.id} className="hover:bg-gray-50">
+              {feeData?.paymentHistory?.map((payment) => (
+                <tr key={payment._id || payment.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm text-gray-900">{payment.semester}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{payment.feeType}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{payment.amount.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{new Date(payment.paymentDate).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{payment.paymentMethod}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{payment.feeType || payment.type}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{payment.amount?.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{new Date(payment.paymentDate || payment.createdAt).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{payment.paymentMethod || payment.method}</td>
                   <td className="px-6 py-4 text-sm font-mono text-gray-600">{payment.transactionId}</td>
                   <td className="px-6 py-4">
                     <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors">
@@ -170,14 +197,13 @@ function FeeManagement() {
           </table>
         </div>
 
-        {/* Mobile View */}
         <div className="md:hidden divide-y divide-gray-200">
-          {feeData.paymentHistory.map((payment) => (
-            <div key={payment.id} className="p-4">
+          {feeData?.paymentHistory?.map((payment) => (
+            <div key={payment._id || payment.id} className="p-4">
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <h3 className="font-semibold text-gray-900">{payment.semester}</h3>
-                  <p className="text-sm text-gray-600">{payment.feeType}</p>
+                  <p className="text-sm text-gray-600">{payment.feeType || payment.type}</p>
                 </div>
                 <div className="flex items-center gap-1 text-green-600">
                   <CheckCircle size={16} />
@@ -187,15 +213,15 @@ function FeeManagement() {
               <div className="space-y-2 text-sm mb-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Amount:</span>
-                  <span className="font-semibold text-gray-900">₹{payment.amount.toLocaleString()}</span>
+                  <span className="font-semibold text-gray-900">₹{payment.amount?.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Date:</span>
-                  <span className="text-gray-900">{new Date(payment.paymentDate).toLocaleDateString()}</span>
+                  <span className="text-gray-900">{new Date(payment.paymentDate || payment.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Method:</span>
-                  <span className="text-gray-900">{payment.paymentMethod}</span>
+                  <span className="text-gray-900">{payment.paymentMethod || payment.method}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Transaction ID:</span>
@@ -211,11 +237,10 @@ function FeeManagement() {
         </div>
       </motion.div>
 
-      {/* Payment Modal */}
       {showPaymentModal && selectedFee && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowPaymentModal(false)}
+          onClick={() => !paying && setShowPaymentModal(false)}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -225,13 +250,13 @@ function FeeManagement() {
           >
             <div className="p-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
               <h2 className="text-2xl font-bold">Complete Payment</h2>
-              <p className="text-sm opacity-90 mt-1">{selectedFee.semester}</p>
+              <p className="text-sm opacity-90 mt-1">{selectedFee.semester || 'Current Semester'}</p>
             </div>
             <form onSubmit={handlePayment} className="p-6">
               <div className="mb-6">
                 <div className="flex justify-between text-lg mb-2">
                   <span className="text-gray-600">Amount to Pay:</span>
-                  <span className="font-bold text-gray-900">₹{selectedFee.amount.toLocaleString()}</span>
+                  <span className="font-bold text-gray-900">₹{selectedFee.amount?.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -240,7 +265,7 @@ function FeeManagement() {
                   Select Payment Method *
                 </label>
                 <div className="space-y-2">
-                  {feeData.paymentMethods.map((method) => (
+                  {paymentMethods.map((method) => (
                     <label
                       key={method.value}
                       className="flex items-start gap-3 p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
@@ -270,15 +295,24 @@ function FeeManagement() {
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
+                  disabled={paying}
                   className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                  disabled={paying}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center"
                 >
-                  Proceed to Pay
+                  {paying ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    'Proceed to Pay'
+                  )}
                 </button>
               </div>
             </form>

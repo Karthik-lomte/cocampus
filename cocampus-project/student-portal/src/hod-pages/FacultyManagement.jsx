@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Plus, Search, Filter, Eye, Edit, Mail,
   Phone, Award, BookOpen, Calendar, X, UserPlus
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { hodService } from '../services/hodService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function FacultyManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Faculty Data
+  const [facultyList, setFacultyList] = useState([]);
+
+  // UI States
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedFaculty, setSelectedFaculty] = useState(null);
@@ -25,7 +39,26 @@ function FacultyManagement() {
 
   const availableClasses = ['CSE-2A', 'CSE-2B', 'CSE-3A', 'CSE-3B', 'CSE-4A', 'CSE-4B'];
 
-  const filteredFaculty = hodData.facultyList.filter(faculty => {
+  // Load Faculty Data
+  useEffect(() => {
+    loadFaculty();
+  }, []);
+
+  const loadFaculty = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hodService.getFaculty();
+      setFacultyList(data.facultyList || data || []);
+    } catch (err) {
+      console.error('Error loading faculty:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredFaculty = facultyList.filter(faculty => {
     const matchesSearch =
       faculty.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       faculty.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -65,18 +98,34 @@ function FacultyManagement() {
     setShowAssignModal(true);
   };
 
-  const handleSubmitAssignment = (e) => {
+  const handleSubmitAssignment = async (e) => {
     e.preventDefault();
+
     if (assignmentData.subjects.length === 0) {
-      alert('Please select at least one subject');
+      toast.error('Please select at least one subject');
       return;
     }
     if (assignmentData.classes.length === 0) {
-      alert('Please select at least one class');
+      toast.error('Please select at least one class');
       return;
     }
-    alert(`Successfully assigned ${assignmentData.subjects.length} subject(s) and ${assignmentData.classes.length} class(es) to ${selectedFaculty.name}`);
-    setShowAssignModal(false);
+
+    try {
+      setSubmitting(true);
+      const subjectData = {
+        subjects: assignmentData.subjects,
+        classes: assignmentData.classes
+      };
+      await hodService.assignSubject(selectedFaculty.id, subjectData);
+      toast.success(`Successfully assigned ${assignmentData.subjects.length} subject(s) and ${assignmentData.classes.length} class(es) to ${selectedFaculty.name}`);
+      await loadFaculty();
+      setShowAssignModal(false);
+    } catch (err) {
+      console.error('Error assigning subjects:', err);
+      toast.error(err.response?.data?.message || 'Failed to assign subjects and classes');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const toggleSubject = (subject) => {
@@ -96,6 +145,15 @@ function FacultyManagement() {
         : [...prev.classes, cls]
     }));
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading faculty management..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadFaculty} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -490,15 +548,17 @@ function FacultyManagement() {
                     <button
                       type="button"
                       onClick={() => setShowAssignModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Assignment
+                      {submitting ? 'Saving...' : 'Save Assignment'}
                     </button>
                   </div>
                 </form>

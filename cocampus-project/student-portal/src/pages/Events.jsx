@@ -1,56 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, MapPin, Users, Coins as CoinsIcon, CheckCircle, X, UserCircle, Phone, Mail, Plus, Trash2, Home } from 'lucide-react';
-import { events, getUpcomingEvents } from '../data/eventsData';
+import { Calendar, MapPin, Users, Coins as CoinsIcon, CheckCircle, X, UserCircle } from 'lucide-react';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const Events = () => {
+  const toast = useToast();
+  const [eventsData, setEventsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [registrationType, setRegistrationType] = useState('single'); // 'single' or 'team'
-
-  // Single Participant Form Data
-  const [singleFormData, setSingleFormData] = useState({
+  const [registering, setRegistering] = useState(false);
+  const [registrationType, setRegistrationType] = useState('single');
+  const [formData, setFormData] = useState({
     fullName: '',
     rollNumber: '',
-    department: '',
-    year: '',
-    mobile: '',
     email: '',
-    gender: '',
-    accommodation: false
+    phone: ''
   });
 
-  // Team Registration Form Data
-  const [teamFormData, setTeamFormData] = useState({
-    teamName: '',
-    teamCategory: '',
-    teamSizeMin: '',
-    teamSizeMax: '',
-    institution: '',
-    teamLeader: {
-      name: '',
-      rollNumber: '',
-      department: '',
-      year: '',
-      email: '',
-      phone: ''
-    },
-    teamMembers: [
-      {
-        name: '',
-        rollNumber: '',
-        department: '',
-        year: '',
-        email: '',
-        phone: ''
-      }
-    ]
-  });
+  useEffect(() => {
+    loadEvents();
+  }, []);
 
-  const filteredEvents = filter === 'all' ? events :
-                        filter === 'registered' ? events.filter(e => e.isRegistered) :
-                        events.filter(e => e.category === filter);
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getEvents();
+      setEventsData(data);
+    } catch (err) {
+      console.error('Events error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRegister = (event) => {
     setSelectedEvent(event);
@@ -58,89 +47,33 @@ const Events = () => {
     setShowRegisterModal(true);
   };
 
-  const handleSubmitSingleRegistration = (e) => {
+  const handleSubmitRegistration = async (e) => {
     e.preventDefault();
-    alert(`Successfully registered for ${selectedEvent.name}!\n\nDetails:\nName: ${singleFormData.fullName}\nRoll No: ${singleFormData.rollNumber}`);
-    resetAndCloseModal();
+    try {
+      setRegistering(true);
+      await studentService.registerForEvent(selectedEvent._id || selectedEvent.id, {
+        ...formData,
+        registrationType
+      });
+      toast.success(`Successfully registered for ${selectedEvent.name}!`);
+      setShowRegisterModal(false);
+      setFormData({ fullName: '', rollNumber: '', email: '', phone: '' });
+      await loadEvents();
+    } catch (err) {
+      console.error('Registration error:', err);
+      toast.error(err.response?.data?.message || 'Registration failed');
+    } finally {
+      setRegistering(false);
+    }
   };
 
-  const handleSubmitTeamRegistration = (e) => {
-    e.preventDefault();
-    const totalMembers = 1 + teamFormData.teamMembers.length; // Leader + members
-    alert(`Successfully registered team "${teamFormData.teamName}" for ${selectedEvent.name}!\n\nTeam Size: ${totalMembers} members\nTeam Leader: ${teamFormData.teamLeader.name}`);
-    resetAndCloseModal();
-  };
+  if (loading) return <Loading fullScreen message="Loading events..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadEvents} fullScreen />;
 
-  const resetAndCloseModal = () => {
-    setShowRegisterModal(false);
-    setSelectedEvent(null);
-    setRegistrationType('single');
-    setSingleFormData({
-      fullName: '',
-      rollNumber: '',
-      department: '',
-      year: '',
-      mobile: '',
-      email: '',
-      gender: '',
-      accommodation: false
-    });
-    setTeamFormData({
-      teamName: '',
-      teamCategory: '',
-      teamSizeMin: '',
-      teamSizeMax: '',
-      institution: '',
-      teamLeader: {
-        name: '',
-        rollNumber: '',
-        department: '',
-        year: '',
-        email: '',
-        phone: ''
-      },
-      teamMembers: [
-        {
-          name: '',
-          rollNumber: '',
-          department: '',
-          year: '',
-          email: '',
-          phone: ''
-        }
-      ]
-    });
-  };
-
-  const addTeamMember = () => {
-    setTeamFormData({
-      ...teamFormData,
-      teamMembers: [
-        ...teamFormData.teamMembers,
-        {
-          name: '',
-          rollNumber: '',
-          department: '',
-          year: '',
-          email: '',
-          phone: ''
-        }
-      ]
-    });
-  };
-
-  const removeTeamMember = (index) => {
-    setTeamFormData({
-      ...teamFormData,
-      teamMembers: teamFormData.teamMembers.filter((_, i) => i !== index)
-    });
-  };
-
-  const updateTeamMember = (index, field, value) => {
-    const updatedMembers = [...teamFormData.teamMembers];
-    updatedMembers[index][field] = value;
-    setTeamFormData({ ...teamFormData, teamMembers: updatedMembers });
-  };
+  const events = eventsData?.events || [];
+  const filteredEvents = filter === 'all' ? events :
+                        filter === 'registered' ? events.filter(e => e.isRegistered) :
+                        events.filter(e => e.category === filter);
 
   return (
     <div className="space-y-6">
@@ -149,7 +82,6 @@ const Events = () => {
         <p className="text-gray-600 mt-1">Explore and register for upcoming events</p>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-2">
         {['all', 'college', 'clubs', 'registered'].map((f) => (
           <button
@@ -166,11 +98,10 @@ const Events = () => {
         ))}
       </div>
 
-      {/* Events Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredEvents.map((event, index) => (
           <motion.div
-            key={event.id}
+            key={event._id || event.id}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.1 }}
@@ -178,7 +109,7 @@ const Events = () => {
           >
             <div className="relative h-48">
               <img
-                src={event.image}
+                src={event.image || 'https://via.placeholder.com/400x200'}
                 alt={event.name}
                 className="w-full h-full object-cover"
               />
@@ -208,7 +139,7 @@ const Events = () => {
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <Users size={16} className="mr-2" />
-                  {event.registeredCount}/{event.maxCapacity} registered
+                  {event.registeredCount || 0}/{event.maxCapacity} registered
                 </div>
                 {event.registrationFee > 0 && (
                   <div className="flex items-center text-sm text-gray-600">
@@ -233,548 +164,106 @@ const Events = () => {
         ))}
       </div>
 
-      {/* Registration Modal */}
       <AnimatePresence>
         {showRegisterModal && selectedEvent && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowRegisterModal(false)}
+              onClick={() => !registering && setShowRegisterModal(false)}
               className="fixed inset-0 bg-black/50 z-50"
             />
-
-            {/* Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl my-8"
+                className="w-full max-w-md bg-white rounded-2xl shadow-2xl"
               >
-              {/* Modal Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center sticky top-0 rounded-t-2xl">
-                <div>
-                  <h2 className="text-2xl font-bold">Event Registration</h2>
-                  <p className="text-blue-100 text-sm mt-1">{selectedEvent.name}</p>
-                </div>
-                <button
-                  onClick={() => setShowRegisterModal(false)}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-                {/* Event Details */}
-                <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar size={16} />
-                    <span>{new Date(selectedEvent.date).toLocaleDateString()} at {selectedEvent.time}</span>
+                <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center rounded-t-2xl">
+                  <div>
+                    <h2 className="text-2xl font-bold">Event Registration</h2>
+                    <p className="text-blue-100 text-sm mt-1">{selectedEvent.name}</p>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin size={16} />
-                    <span>{selectedEvent.venue}</span>
-                  </div>
-                  {selectedEvent.registrationFee > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <CoinsIcon size={16} />
-                      <span className="font-semibold">Registration Fee: ₹{selectedEvent.registrationFee}</span>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => !registering && setShowRegisterModal(false)}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
                 </div>
 
-                {/* Registration Type Selector */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Registration Type</label>
-                  <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmitRegistration} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.rollNumber}
+                      onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
+                    <input
+                      type="tel"
+                      required
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => setRegistrationType('single')}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        registrationType === 'single'
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      onClick={() => setShowRegisterModal(false)}
+                      disabled={registering}
+                      className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                     >
-                      <UserCircle className={`mx-auto mb-2 ${registrationType === 'single' ? 'text-blue-600' : 'text-gray-400'}`} size={32} />
-                      <div className="font-semibold text-gray-900">Single Participant</div>
-                      <div className="text-xs text-gray-500">Individual Registration</div>
+                      Cancel
                     </button>
-
                     <button
-                      type="button"
-                      onClick={() => setRegistrationType('team')}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        registrationType === 'team'
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      type="submit"
+                      disabled={registering}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg disabled:opacity-50 flex items-center justify-center"
                     >
-                      <Users className={`mx-auto mb-2 ${registrationType === 'team' ? 'text-blue-600' : 'text-gray-400'}`} size={32} />
-                      <div className="font-semibold text-gray-900">Team Registration</div>
-                      <div className="text-xs text-gray-500">Register as a Team</div>
+                      {registering ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Registering...
+                        </>
+                      ) : (
+                        selectedEvent.registrationFee > 0 ? `Pay ₹${selectedEvent.registrationFee} & Register` : 'Register'
+                      )}
                     </button>
                   </div>
-                </div>
-
-                {/* Single Participant Form */}
-                {registrationType === 'single' && (
-                  <form onSubmit={handleSubmitSingleRegistration} className="space-y-6">
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4">Participant Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={singleFormData.fullName}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, fullName: e.target.value })}
-                            placeholder="Enter your full name"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number / Student ID *</label>
-                          <input
-                            type="text"
-                            required
-                            value={singleFormData.rollNumber}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, rollNumber: e.target.value })}
-                            placeholder="Enter roll number"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
-                          <select
-                            required
-                            value={singleFormData.department}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, department: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Department</option>
-                            <option>Computer Science</option>
-                            <option>Electronics</option>
-                            <option>Mechanical</option>
-                            <option>Civil</option>
-                            <option>Electrical</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Year *</label>
-                          <select
-                            required
-                            value={singleFormData.year}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, year: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Year</option>
-                            <option>1st Year</option>
-                            <option>2nd Year</option>
-                            <option>3rd Year</option>
-                            <option>4th Year</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number *</label>
-                          <input
-                            type="tel"
-                            required
-                            value={singleFormData.mobile}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, mobile: e.target.value })}
-                            placeholder="+91 98765 43210"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Email ID *</label>
-                          <input
-                            type="email"
-                            required
-                            value={singleFormData.email}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, email: e.target.value })}
-                            placeholder="your.email@college.edu"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Gender (Optional)</label>
-                          <select
-                            value={singleFormData.gender}
-                            onChange={(e) => setSingleFormData({ ...singleFormData, gender: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Gender</option>
-                            <option>Male</option>
-                            <option>Female</option>
-                            <option>Other</option>
-                            <option>Prefer not to say</option>
-                          </select>
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={singleFormData.accommodation}
-                              onChange={(e) => setSingleFormData({ ...singleFormData, accommodation: e.target.checked })}
-                              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                              <Home size={16} />
-                              Accommodation Required (if event spans multiple days)
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Submit Buttons */}
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowRegisterModal(false)}
-                        className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium"
-                      >
-                        {selectedEvent.registrationFee > 0 ? `Pay ₹${selectedEvent.registrationFee} & Register` : 'Register'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* Team Registration Form */}
-                {registrationType === 'team' && (
-                  <form onSubmit={handleSubmitTeamRegistration} className="space-y-6">
-                    {/* Team Details */}
-                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4">Team Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Team Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={teamFormData.teamName}
-                            onChange={(e) => setTeamFormData({ ...teamFormData, teamName: e.target.value })}
-                            placeholder="Enter team name"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Team Category *</label>
-                          <select
-                            required
-                            value={teamFormData.teamCategory}
-                            onChange={(e) => setTeamFormData({ ...teamFormData, teamCategory: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Category</option>
-                            <option>Junior</option>
-                            <option>Senior</option>
-                            <option>Open</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Institution / Branch *</label>
-                          <input
-                            type="text"
-                            required
-                            value={teamFormData.institution}
-                            onChange={(e) => setTeamFormData({ ...teamFormData, institution: e.target.value })}
-                            placeholder="e.g., Co-Campus College"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Team Size (Min) *</label>
-                          <input
-                            type="number"
-                            required
-                            min="2"
-                            value={teamFormData.teamSizeMin}
-                            onChange={(e) => setTeamFormData({ ...teamFormData, teamSizeMin: e.target.value })}
-                            placeholder="Min members"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Team Size (Max) *</label>
-                          <input
-                            type="number"
-                            required
-                            min="2"
-                            value={teamFormData.teamSizeMax}
-                            onChange={(e) => setTeamFormData({ ...teamFormData, teamSizeMax: e.target.value })}
-                            placeholder="Max members"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Team Leader Details */}
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4">Team Leader Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={teamFormData.teamLeader.name}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, name: e.target.value }
-                            })}
-                            placeholder="Team leader name"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number *</label>
-                          <input
-                            type="text"
-                            required
-                            value={teamFormData.teamLeader.rollNumber}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, rollNumber: e.target.value }
-                            })}
-                            placeholder="Roll number"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
-                          <select
-                            required
-                            value={teamFormData.teamLeader.department}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, department: e.target.value }
-                            })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Department</option>
-                            <option>Computer Science</option>
-                            <option>Electronics</option>
-                            <option>Mechanical</option>
-                            <option>Civil</option>
-                            <option>Electrical</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Year *</label>
-                          <select
-                            required
-                            value={teamFormData.teamLeader.year}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, year: e.target.value }
-                            })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Year</option>
-                            <option>1st Year</option>
-                            <option>2nd Year</option>
-                            <option>3rd Year</option>
-                            <option>4th Year</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                          <input
-                            type="email"
-                            required
-                            value={teamFormData.teamLeader.email}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, email: e.target.value }
-                            })}
-                            placeholder="email@college.edu"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
-                          <input
-                            type="tel"
-                            required
-                            value={teamFormData.teamLeader.phone}
-                            onChange={(e) => setTeamFormData({
-                              ...teamFormData,
-                              teamLeader: { ...teamFormData.teamLeader, phone: e.target.value }
-                            })}
-                            placeholder="+91 98765 43210"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Team Members */}
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold text-gray-900">Team Members</h3>
-                        <button
-                          type="button"
-                          onClick={addTeamMember}
-                          className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                          <Plus size={16} />
-                          Add Member
-                        </button>
-                      </div>
-
-                      <div className="space-y-4">
-                        {teamFormData.teamMembers.map((member, index) => (
-                          <div key={index} className="bg-white rounded-lg p-4 border border-green-300">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-semibold text-gray-900">Member {index + 1}</h4>
-                              {teamFormData.teamMembers.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeTeamMember(index)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Member Name *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={member.name}
-                                  onChange={(e) => updateTeamMember(index, 'name', e.target.value)}
-                                  placeholder="Full name"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={member.rollNumber}
-                                  onChange={(e) => updateTeamMember(index, 'rollNumber', e.target.value)}
-                                  placeholder="Roll number"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
-                                <select
-                                  required
-                                  value={member.department}
-                                  onChange={(e) => updateTeamMember(index, 'department', e.target.value)}
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                  <option value="">Select Department</option>
-                                  <option>Computer Science</option>
-                                  <option>Electronics</option>
-                                  <option>Mechanical</option>
-                                  <option>Civil</option>
-                                  <option>Electrical</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Year *</label>
-                                <select
-                                  required
-                                  value={member.year}
-                                  onChange={(e) => updateTeamMember(index, 'year', e.target.value)}
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                  <option value="">Select Year</option>
-                                  <option>1st Year</option>
-                                  <option>2nd Year</option>
-                                  <option>3rd Year</option>
-                                  <option>4th Year</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                                <input
-                                  type="email"
-                                  required
-                                  value={member.email}
-                                  onChange={(e) => updateTeamMember(index, 'email', e.target.value)}
-                                  placeholder="email@college.edu"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
-                                <input
-                                  type="tel"
-                                  required
-                                  value={member.phone}
-                                  onChange={(e) => updateTeamMember(index, 'phone', e.target.value)}
-                                  placeholder="+91 98765 43210"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Submit Buttons */}
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowRegisterModal(false)}
-                        className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium"
-                      >
-                        {selectedEvent.registrationFee > 0 ? `Pay ₹${selectedEvent.registrationFee} & Register Team` : 'Register Team'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
+                </form>
               </motion.div>
             </div>
           </>

@@ -1,11 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Home, Users, Utensils, Wrench, Wifi, Calendar } from 'lucide-react';
-import { hostelData } from '../data/hostelData';
+import { studentService } from '../services/studentService';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function Hostel() {
+  const [hostelData, setHostelData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedDay, setSelectedDay] = useState('Monday');
+
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  useEffect(() => {
+    loadHostelInfo();
+  }, []);
+
+  const loadHostelInfo = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getHostelInfo();
+      setHostelData(data);
+    } catch (err) {
+      console.error('Hostel error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading hostel information..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadHostelInfo} fullScreen />;
+  if (!hostelData) return null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -31,24 +59,24 @@ function Hostel() {
             <Home size={32} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold mb-4">{hostelData.studentInfo.hostelName}</h2>
+            <h2 className="text-2xl font-bold mb-4">{hostelData.studentInfo?.hostelName || 'N/A'}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white bg-opacity-20 rounded-lg p-4">
                 <div className="text-sm opacity-90">Room Number</div>
-                <div className="text-xl font-bold">{hostelData.studentInfo.roomNumber}</div>
+                <div className="text-xl font-bold">{hostelData.studentInfo?.roomNumber || 'N/A'}</div>
               </div>
               <div className="bg-white bg-opacity-20 rounded-lg p-4">
                 <div className="text-sm opacity-90">Floor</div>
-                <div className="text-xl font-bold">{hostelData.studentInfo.floor}</div>
+                <div className="text-xl font-bold">{hostelData.studentInfo?.floor || 'N/A'}</div>
               </div>
               <div className="bg-white bg-opacity-20 rounded-lg p-4">
                 <div className="text-sm opacity-90">Room Type</div>
-                <div className="text-xl font-bold">{hostelData.studentInfo.roomType}</div>
+                <div className="text-xl font-bold">{hostelData.studentInfo?.roomType || 'N/A'}</div>
               </div>
               <div className="bg-white bg-opacity-20 rounded-lg p-4">
                 <div className="text-sm opacity-90">Roommate</div>
-                <div className="text-lg font-bold">{hostelData.studentInfo.roommate.name}</div>
-                <div className="text-xs opacity-75">{hostelData.studentInfo.roommate.rollNo}</div>
+                <div className="text-lg font-bold">{hostelData.studentInfo?.roommate?.name || 'N/A'}</div>
+                <div className="text-xs opacity-75">{hostelData.studentInfo?.roommate?.rollNo || ''}</div>
               </div>
             </div>
           </div>
@@ -72,11 +100,11 @@ function Hostel() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Schedule:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.laundry.schedule}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.laundry?.schedule || 'N/A'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Timings:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.laundry.timings}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.laundry?.timings || 'N/A'}</span>
             </div>
           </div>
         </motion.div>
@@ -96,11 +124,11 @@ function Hostel() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Contact:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.maintenance.contact}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.maintenance?.contact || 'N/A'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Support:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.maintenance.timings}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.maintenance?.timings || 'N/A'}</span>
             </div>
           </div>
         </motion.div>
@@ -120,11 +148,11 @@ function Hostel() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Speed:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.wifi.speed}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.wifi?.speed || 'N/A'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Network:</span>
-              <span className="font-medium text-gray-900">{hostelData.services.wifi.username}</span>
+              <span className="font-medium text-gray-900">{hostelData.services?.wifi?.username || 'N/A'}</span>
             </div>
           </div>
         </motion.div>
@@ -166,19 +194,23 @@ function Hostel() {
         {/* Menu for Selected Day */}
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {Object.entries(hostelData.weeklyMenu[selectedDay]).map(([mealType, items]) => (
-              <div key={mealType} className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-bold text-gray-900 mb-3 capitalize">{mealType}</h3>
-                <ul className="space-y-2">
-                  {items.map((item, index) => (
-                    <li key={index} className="flex items-start gap-2 text-sm text-gray-700">
-                      <span className="text-orange-500">•</span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {hostelData.weeklyMenu?.[selectedDay] ? (
+              Object.entries(hostelData.weeklyMenu[selectedDay]).map(([mealType, items]) => (
+                <div key={mealType} className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-bold text-gray-900 mb-3 capitalize">{mealType}</h3>
+                  <ul className="space-y-2">
+                    {Array.isArray(items) && items.map((item, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="text-orange-500">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full text-center text-gray-500">No menu available for {selectedDay}</div>
+            )}
           </div>
         </div>
       </motion.div>
@@ -207,8 +239,8 @@ function Hostel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {hostelData.gatePassHistory.map((pass) => (
-                <tr key={pass.id} className="hover:bg-gray-50">
+              {hostelData.gatePassHistory?.map((pass) => (
+                <tr key={pass._id || pass.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{pass.reason}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {new Date(pass.outDate).toLocaleDateString()} at {pass.outTime}
@@ -221,7 +253,7 @@ function Hostel() {
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       pass.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                     }`}>
-                      {pass.status.toUpperCase()}
+                      {pass.status?.toUpperCase()}
                     </span>
                   </td>
                 </tr>
@@ -232,14 +264,14 @@ function Hostel() {
 
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-gray-200">
-          {hostelData.gatePassHistory.map((pass) => (
-            <div key={pass.id} className="p-4">
+          {hostelData.gatePassHistory?.map((pass) => (
+            <div key={pass._id || pass.id} className="p-4">
               <div className="flex justify-between items-start mb-3">
                 <h3 className="font-semibold text-gray-900">{pass.reason}</h3>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                   pass.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                 }`}>
-                  {pass.status.toUpperCase()}
+                  {pass.status?.toUpperCase()}
                 </span>
               </div>
               <div className="space-y-2 text-sm text-gray-600">

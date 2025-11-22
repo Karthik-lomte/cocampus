@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
@@ -17,21 +17,21 @@ import {
   Paperclip,
   FileDown
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const NoticeManagement = () => {
-  const [notices, setNotices] = useState([
-    { id: 1, title: 'End Semester Examination Schedule', content: 'The end semester examinations for all branches will commence from January 20, 2024. Students are advised to collect their hall tickets from the examination cell. Detailed timetable has been uploaded on the portal.', category: 'Exam', priority: 'High', date: '2024-01-15', pinned: true, postedBy: 'Admin', attachment: '/attachments/exam-schedule-jan-2024.pdf', attachmentName: 'exam-schedule-jan-2024.pdf' },
-    { id: 2, title: 'Fee Payment Deadline Extended', content: 'The last date for fee payment has been extended to January 25, 2024. Students who have not yet paid their fees are requested to do so before the deadline to avoid late fees.', category: 'Fee', priority: 'High', date: '2024-01-14', pinned: true, postedBy: 'Admin', attachment: '/attachments/fee-structure-2024.pdf', attachmentName: 'fee-structure-2024.pdf' },
-    { id: 3, title: 'Annual Sports Day 2024', content: 'The Annual Sports Day will be held on February 15, 2024. All students interested in participating should register with their respective department sports coordinators by January 30, 2024.', category: 'Event', priority: 'Medium', date: '2024-01-12', pinned: false, postedBy: 'Admin', attachment: null, attachmentName: null },
-    { id: 4, title: 'Campus Placement Drive - TCS', content: 'TCS will be conducting campus placement drive on January 28, 2024. Eligible students from CSE, IT, and ECE branches with 60% and above can register through the placement portal.', category: 'Placement', priority: 'High', date: '2024-01-10', pinned: false, postedBy: 'Placement Officer', attachment: '/attachments/tcs-placement-circular.pdf', attachmentName: 'tcs-placement-circular.pdf' },
-    { id: 5, title: 'Library Timings Changed', content: 'The library will remain open from 8:00 AM to 10:00 PM during the examination period. Students can avail 24/7 access to digital resources through the library portal.', category: 'General', priority: 'Low', date: '2024-01-08', pinned: false, postedBy: 'Librarian', attachment: null, attachmentName: null },
-    { id: 6, title: 'Workshop on Machine Learning', content: 'A two-day workshop on Machine Learning and AI will be conducted on January 22-23, 2024. Registration is mandatory. Limited seats available.', category: 'Academic', priority: 'Medium', date: '2024-01-05', pinned: false, postedBy: 'CSE Department', attachment: '/attachments/ml-workshop-brochure.pdf', attachmentName: 'ml-workshop-brochure.pdf' }
-  ]);
-
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [notices, setNotices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [editingNotice, setEditingNotice] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -44,6 +44,24 @@ const NoticeManagement = () => {
 
   const categories = ['Academic', 'Exam', 'Fee', 'Event', 'Placement', 'General'];
   const priorities = ['High', 'Medium', 'Low'];
+
+  useEffect(() => {
+    loadNotices();
+  }, []);
+
+  const loadNotices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminService.getNotices();
+      setNotices(data.notices || data || []);
+    } catch (err) {
+      console.error('Notices error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const totalNotices = notices.length;
   const pinnedNotices = notices.filter(n => n.pinned).length;
@@ -91,12 +109,9 @@ const NoticeManagement = () => {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // In a real application, you would upload the file to a server
-      // and get back a URL. Here we create a local URL for demonstration.
-      const fileUrl = URL.createObjectURL(file);
       setFormData({
         ...formData,
-        attachment: fileUrl,
+        attachment: file,
         attachmentName: file.name
       });
     }
@@ -110,41 +125,71 @@ const NoticeManagement = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingNotice) {
-      setNotices(notices.map(notice =>
-        notice.id === editingNotice.id
-          ? { ...notice, ...formData }
-          : notice
-      ));
-      alert('Notice updated successfully!');
-    } else {
-      const newNotice = {
-        id: notices.length + 1,
-        ...formData,
-        date: new Date().toISOString().split('T')[0],
-        postedBy: 'Admin'
-      };
-      setNotices([newNotice, ...notices]);
-      alert('Notice added successfully!');
+    try {
+      setSubmitting(true);
+      const noticeFormData = new FormData();
+      noticeFormData.append('title', formData.title);
+      noticeFormData.append('content', formData.content);
+      noticeFormData.append('category', formData.category);
+      noticeFormData.append('priority', formData.priority);
+      noticeFormData.append('pinned', formData.pinned);
+
+      if (formData.attachment) {
+        noticeFormData.append('attachment', formData.attachment);
+      }
+
+      if (editingNotice) {
+        await adminService.updateNotice(editingNotice.id, noticeFormData);
+        toast.success('Notice updated successfully!');
+      } else {
+        await adminService.createNotice(noticeFormData);
+        toast.success('Notice added successfully!');
+      }
+
+      await loadNotices();
+      setShowModal(false);
+    } catch (err) {
+      console.error('Submit notice error:', err);
+      toast.error(err.response?.data?.message || 'Failed to save notice');
+    } finally {
+      setSubmitting(false);
     }
-    setShowModal(false);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this notice?')) {
-      setNotices(notices.filter(notice => notice.id !== id));
-      alert('Notice deleted successfully!');
+      try {
+        await adminService.deleteNotice(id);
+        toast.success('Notice deleted successfully!');
+        await loadNotices();
+      } catch (err) {
+        console.error('Delete notice error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete notice');
+      }
     }
   };
 
-  const togglePin = (id) => {
-    setNotices(notices.map(notice =>
-      notice.id === id
-        ? { ...notice, pinned: !notice.pinned }
-        : notice
-    ));
+  const togglePin = async (id) => {
+    try {
+      const notice = notices.find(n => n.id === id);
+      if (!notice) return;
+
+      const noticeFormData = new FormData();
+      noticeFormData.append('title', notice.title);
+      noticeFormData.append('content', notice.content);
+      noticeFormData.append('category', notice.category);
+      noticeFormData.append('priority', notice.priority);
+      noticeFormData.append('pinned', !notice.pinned);
+
+      await adminService.updateNotice(id, noticeFormData);
+      toast.success(notice.pinned ? 'Notice unpinned' : 'Notice pinned');
+      await loadNotices();
+    } catch (err) {
+      console.error('Toggle pin error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update notice');
+    }
   };
 
   const getPriorityColor = (priority) => {
@@ -184,6 +229,9 @@ const NoticeManagement = () => {
     };
     return colors[category] || 'bg-gray-100 text-gray-700';
   };
+
+  if (loading) return <Loading fullScreen message="Loading notice management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadNotices} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -516,15 +564,17 @@ const NoticeManagement = () => {
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingNotice ? 'Update Notice' : 'Add Notice'}
+                    {submitting ? 'Saving...' : editingNotice ? 'Update Notice' : 'Add Notice'}
                   </button>
                 </div>
               </form>

@@ -7,6 +7,17 @@ export const hodService = {
     return response.data.data;
   },
 
+  // Profile
+  getProfile: async () => {
+    const response = await api.get('/hod/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (data) => {
+    const response = await api.put('/hod/profile', data);
+    return response.data.data;
+  },
+
   // Faculty Management
   getFaculty: async (params = {}) => {
     const response = await api.get('/hod/faculty', { params });
@@ -20,6 +31,11 @@ export const hodService = {
 
   assignSubject: async (facultyId, subjectData) => {
     const response = await api.post(`/hod/faculty/${facultyId}/assign-subject`, subjectData);
+    return response.data.data;
+  },
+
+  createFaculty: async (facultyData) => {
+    const response = await api.post('/hod/faculty', facultyData);
     return response.data.data;
   },
 
@@ -84,8 +100,36 @@ export const hodService = {
     return response.data.data;
   },
 
-  approveLeave: async (leaveId, decision) => {
-    const response = await api.post(`/hod/leave-requests/${leaveId}/approve`, decision);
+  approveLeave: async (leaveId, remarks) => {
+    const response = await api.post(`/hod/leave-requests/${leaveId}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectLeave: async (leaveId, remarks) => {
+    const response = await api.post(`/hod/leave-requests/${leaveId}/reject`, { remarks });
+    return response.data.data;
+  },
+
+  applyLeave: async (leaveData) => {
+    const response = await api.post('/hod/leave-requests/apply', leaveData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  // Gate Pass Approvals
+  getGatePassRequests: async (params = {}) => {
+    const response = await api.get('/hod/gate-pass-requests', { params });
+    return response.data.data;
+  },
+
+  approveGatePass: async (gatePassId, remarks) => {
+    const response = await api.post(`/hod/gate-pass-requests/${gatePassId}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectGatePass: async (gatePassId, remarks) => {
+    const response = await api.post(`/hod/gate-pass-requests/${gatePassId}/reject`, { remarks });
     return response.data.data;
   },
 
@@ -105,6 +149,49 @@ export const hodService = {
     const response = await api.post('/hod/notices', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+    return response.data.data;
+  },
+
+  // Achievements
+  getAchievements: async (params = {}) => {
+    const response = await api.get('/hod/achievements', { params });
+    return response.data.data;
+  },
+
+  uploadAchievement: async (formData) => {
+    const response = await api.post('/hod/achievements', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  downloadAchievementCertificate: async (achievementId) => {
+    const response = await api.get(`/hod/achievements/${achievementId}/certificate`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  // Resources
+  getResources: async (params = {}) => {
+    const response = await api.get('/hod/resources', { params });
+    return response.data.data;
+  },
+
+  createResource: async (formData) => {
+    const response = await api.post('/hod/resources', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  updateResource: async (resourceId, resourceData) => {
+    const response = await api.put(`/hod/resources/${resourceId}`, resourceData);
+    return response.data.data;
+  },
+
+  deleteResource: async (resourceId) => {
+    const response = await api.delete(`/hod/resources/${resourceId}`);
     return response.data.data;
   }
 };

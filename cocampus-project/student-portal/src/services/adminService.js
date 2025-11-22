@@ -82,7 +82,28 @@ export const adminService = {
     return response.data.data;
   },
 
-  // Academic Management
+  // Academic Management - Semesters
+  getSemesters: async () => {
+    const response = await api.get('/admin/academic/semesters');
+    return response.data.data;
+  },
+
+  createSemester: async (data) => {
+    const response = await api.post('/admin/academic/semesters', data);
+    return response.data.data;
+  },
+
+  updateSemester: async (id, data) => {
+    const response = await api.put(`/admin/academic/semesters/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteSemester: async (id) => {
+    const response = await api.delete(`/admin/academic/semesters/${id}`);
+    return response.data.data;
+  },
+
+  // Academic Management - Calendar
   getAcademicCalendar: async () => {
     const response = await api.get('/admin/academic/calendar');
     return response.data.data;
@@ -90,6 +111,34 @@ export const adminService = {
 
   createAcademicEvent: async (data) => {
     const response = await api.post('/admin/academic/calendar', data);
+    return response.data.data;
+  },
+
+  updateAcademicEvent: async (id, data) => {
+    const response = await api.put(`/admin/academic/calendar/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteAcademicEvent: async (id) => {
+    const response = await api.delete(`/admin/academic/calendar/${id}`);
+    return response.data.data;
+  },
+
+  // Academic Management - External Marks
+  getStudentMarks: async (params) => {
+    const response = await api.get('/admin/academic/marks', { params });
+    return response.data.data;
+  },
+
+  saveExternalMarks: async (data) => {
+    const response = await api.post('/admin/academic/marks', data);
+    return response.data.data;
+  },
+
+  bulkUploadMarks: async (formData) => {
+    const response = await api.post('/admin/academic/marks/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data.data;
   },
 
@@ -104,6 +153,21 @@ export const adminService = {
     return response.data.data;
   },
 
+  updateFeeStructure: async (id, data) => {
+    const response = await api.put(`/admin/fees/structures/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteFeeStructure: async (id) => {
+    const response = await api.delete(`/admin/fees/structures/${id}`);
+    return response.data.data;
+  },
+
+  getPayments: async (params = {}) => {
+    const response = await api.get('/admin/fees/payments', { params });
+    return response.data.data;
+  },
+
   // Hostel Management
   getHostelBlocks: async () => {
     const response = await api.get('/admin/hostel/blocks');
@@ -112,6 +176,26 @@ export const adminService = {
 
   createHostelBlock: async (data) => {
     const response = await api.post('/admin/hostel/blocks', data);
+    return response.data.data;
+  },
+
+  updateHostelBlock: async (id, data) => {
+    const response = await api.put(`/admin/hostel/blocks/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteHostelBlock: async (id) => {
+    const response = await api.delete(`/admin/hostel/blocks/${id}`);
+    return response.data.data;
+  },
+
+  getWardens: async () => {
+    const response = await api.get('/admin/hostel/wardens');
+    return response.data.data;
+  },
+
+  assignWarden: async (blockId, wardenId) => {
+    const response = await api.post(`/admin/hostel/blocks/${blockId}/assign-warden`, { wardenId });
     return response.data.data;
   },
 
@@ -126,9 +210,59 @@ export const adminService = {
     return response.data.data;
   },
 
+  updateFacility: async (id, data) => {
+    const response = await api.put(`/admin/sports/facilities/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteFacility: async (id) => {
+    const response = await api.delete(`/admin/sports/facilities/${id}`);
+    return response.data.data;
+  },
+
+  getSportsBookings: async (params = {}) => {
+    const response = await api.get('/admin/sports/bookings', { params });
+    return response.data.data;
+  },
+
+  approveBooking: async (id) => {
+    const response = await api.post(`/admin/sports/bookings/${id}/approve`);
+    return response.data.data;
+  },
+
+  rejectBooking: async (id, reason) => {
+    const response = await api.post(`/admin/sports/bookings/${id}/reject`, { reason });
+    return response.data.data;
+  },
+
   // Approval Management
   getPendingApprovals: async () => {
     const response = await api.get('/admin/approvals/pending');
+    return response.data.data;
+  },
+
+  approveLeave: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/leave/${id}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectLeave: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/leave/${id}/reject`, { remarks });
+    return response.data.data;
+  },
+
+  updateCertificateStatus: async (id, status) => {
+    const response = await api.put(`/admin/approvals/certificate/${id}`, { status });
+    return response.data.data;
+  },
+
+  approveSportsBooking: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/sports/${id}/approve`, { remarks });
+    return response.data.data;
+  },
+
+  rejectSportsBooking: async (id, remarks) => {
+    const response = await api.post(`/admin/approvals/sports/${id}/reject`, { remarks });
     return response.data.data;
   },
 
@@ -171,6 +305,22 @@ export const adminService = {
 
   updateSettings: async (data) => {
     const response = await api.put('/admin/settings', data);
+    return response.data.data;
+  },
+
+  // Profile Management
+  getProfile: async () => {
+    const response = await api.get('/admin/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (data) => {
+    const response = await api.put('/admin/profile', data);
+    return response.data.data;
+  },
+
+  changePassword: async (data) => {
+    const response = await api.put('/admin/change-password', data);
     return response.data.data;
   }
 };

@@ -1,11 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { UserCheck, Building, Home, Star, Send } from 'lucide-react';
-import { feedbackData } from '../data/feedbackData';
+import { studentService } from '../services/studentService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function Feedback() {
+  const toast = useToast();
+  const [feedbackData, setFeedbackData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedFaculty, setSelectedFaculty] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [ratings, setRatings] = useState({
     teaching_clarity: 0,
     subject_knowledge: 0,
@@ -14,19 +22,62 @@ function Feedback() {
   });
   const [suggestions, setSuggestions] = useState('');
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    alert('Feedback submitted successfully! Your response is anonymous.');
-    setSelectedCategory(null);
-    setSelectedFaculty(null);
-    setRatings({
-      teaching_clarity: 0,
-      subject_knowledge: 0,
-      punctuality: 0,
-      student_interaction: 0
-    });
-    setSuggestions('');
+  useEffect(() => {
+    loadFeedback();
+  }, []);
+
+  const loadFeedback = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await studentService.getFeedbackHistory();
+      setFeedbackData(data);
+    } catch (err) {
+      console.error('Feedback error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const allRated = Object.values(ratings).every(r => r > 0);
+    if (!allRated) {
+      toast.error('Please rate all criteria');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await studentService.submitFeedback({
+        category: selectedCategory,
+        facultyId: selectedFaculty?._id,
+        ratings,
+        suggestions
+      });
+      toast.success('Feedback submitted successfully! Your response is anonymous.');
+      setSelectedCategory(null);
+      setSelectedFaculty(null);
+      setRatings({
+        teaching_clarity: 0,
+        subject_knowledge: 0,
+        punctuality: 0,
+        student_interaction: 0
+      });
+      setSuggestions('');
+      await loadFeedback();
+    } catch (err) {
+      console.error('Submit error:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading feedback..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadFeedback} fullScreen />;
 
   const RatingStars = ({ rating, onChange }) => {
     return (
@@ -51,14 +102,18 @@ function Feedback() {
   };
 
   const getCategoryIcon = (iconName) => {
-    const icons = {
-      UserCheck: UserCheck,
-      Building: Building,
-      Home: Home
-    };
+    const icons = { UserCheck, Building, Home };
     const Icon = icons[iconName];
     return <Icon size={24} />;
   };
+
+  const feedbackCategories = feedbackData?.categories || [
+    { id: 'faculty', name: 'Faculty Feedback', description: 'Rate your faculty members', icon: 'UserCheck' },
+    { id: 'infrastructure', name: 'Infrastructure', description: 'Campus facilities feedback', icon: 'Building' },
+    { id: 'hostel', name: 'Hostel Services', description: 'Hostel and mess feedback', icon: 'Home' }
+  ];
+
+  const facultyList = feedbackData?.facultyList || [];
 
   if (selectedCategory === 'faculty' && selectedFaculty) {
     return (
@@ -85,7 +140,7 @@ function Feedback() {
         >
           <div className="flex items-center gap-4 mb-6 pb-6 border-b">
             <img
-              src={selectedFaculty.image}
+              src={selectedFaculty.image || 'https://via.placeholder.com/64'}
               alt={selectedFaculty.name}
               className="w-16 h-16 rounded-full"
             />
@@ -160,16 +215,27 @@ function Feedback() {
               <button
                 type="button"
                 onClick={() => setSelectedFaculty(null)}
+                disabled={submitting}
                 className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                disabled={submitting}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50"
               >
-                <Send size={20} />
-                Submit Feedback
+                {submitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    Submit Feedback
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -197,9 +263,9 @@ function Feedback() {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {feedbackData.facultyList.map((faculty, index) => (
+          {facultyList.map((faculty, index) => (
             <motion.div
-              key={faculty.id}
+              key={faculty._id || faculty.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
@@ -208,7 +274,7 @@ function Feedback() {
             >
               <div className="flex flex-col items-center text-center">
                 <img
-                  src={faculty.image}
+                  src={faculty.image || 'https://via.placeholder.com/96'}
                   alt={faculty.name}
                   className="w-24 h-24 rounded-full mb-4"
                 />
@@ -237,9 +303,8 @@ function Feedback() {
         <p className="text-gray-600">Share your feedback to help us improve</p>
       </motion.div>
 
-      {/* Feedback Categories */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {feedbackData.feedbackCategories.map((category, index) => (
+        {feedbackCategories.map((category, index) => (
           <motion.div
             key={category.id}
             initial={{ opacity: 0, y: 20 }}
@@ -259,7 +324,6 @@ function Feedback() {
         ))}
       </div>
 
-      {/* Feedback History */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -270,8 +334,8 @@ function Feedback() {
           <h2 className="text-xl font-bold text-gray-900">Feedback History</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {feedbackData.feedbackHistory.map((feedback) => (
-            <div key={feedback.id} className="p-4 hover:bg-gray-50">
+          {feedbackData?.feedbackHistory?.map((feedback) => (
+            <div key={feedback._id || feedback.id} className="p-4 hover:bg-gray-50">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-semibold text-gray-900">{feedback.category}</h3>
@@ -279,10 +343,10 @@ function Feedback() {
                 </div>
                 <div className="text-right">
                   <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                    {feedback.status.toUpperCase()}
+                    {(feedback.status || 'submitted').toUpperCase()}
                   </span>
                   <p className="text-xs text-gray-500 mt-2">
-                    {new Date(feedback.submittedDate).toLocaleDateString()}
+                    {new Date(feedback.submittedDate || feedback.createdAt).toLocaleDateString()}
                   </p>
                 </div>
               </div>
