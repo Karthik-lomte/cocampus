@@ -233,6 +233,86 @@ export const getFeeStats = async () => {
   return response.data;
 };
 
+// Hostel Blocks
+export const getHostelBlocks = async () => {
+  const response = await apiClient.get('/hostels/blocks');
+  return response.data;
+};
+
+export const getHostelBlock = async (id) => {
+  const response = await apiClient.get(`/hostels/blocks/${id}`);
+  return response.data;
+};
+
+export const createHostelBlock = async (blockData) => {
+  const response = await apiClient.post('/hostels/blocks', blockData);
+  return response.data;
+};
+
+export const updateHostelBlock = async (id, blockData) => {
+  const response = await apiClient.put(`/hostels/blocks/${id}`, blockData);
+  return response.data;
+};
+
+export const deleteHostelBlock = async (id) => {
+  const response = await apiClient.delete(`/hostels/blocks/${id}`);
+  return response.data;
+};
+
+// Rooms
+export const getRooms = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/hostels/rooms?${params}`);
+  return response.data;
+};
+
+export const getRoom = async (id) => {
+  const response = await apiClient.get(`/hostels/rooms/${id}`);
+  return response.data;
+};
+
+export const createRoom = async (roomData) => {
+  const response = await apiClient.post('/hostels/rooms', roomData);
+  return response.data;
+};
+
+export const updateRoom = async (id, roomData) => {
+  const response = await apiClient.put(`/hostels/rooms/${id}`, roomData);
+  return response.data;
+};
+
+export const deleteRoom = async (id) => {
+  const response = await apiClient.delete(`/hostels/rooms/${id}`);
+  return response.data;
+};
+
+// Room Allocations
+export const getRoomAllocations = async (filters = {}) => {
+  const params = new URLSearchParams(filters);
+  const response = await apiClient.get(`/hostels/allocations?${params}`);
+  return response.data;
+};
+
+export const createRoomAllocation = async (allocationData) => {
+  const response = await apiClient.post('/hostels/allocations', allocationData);
+  return response.data;
+};
+
+export const updateRoomAllocation = async (id, allocationData) => {
+  const response = await apiClient.put(`/hostels/allocations/${id}`, allocationData);
+  return response.data;
+};
+
+export const deleteRoomAllocation = async (id) => {
+  const response = await apiClient.delete(`/hostels/allocations/${id}`);
+  return response.data;
+};
+
+export const getHostelStats = async () => {
+  const response = await apiClient.get('/hostels/stats');
+  return response.data;
+};
+
 export const adminService = {
   // Dashboard
   getDashboardStats,
@@ -291,6 +371,23 @@ export const adminService = {
   updateFeePayment,
   deleteFeePayment,
   getFeeStats,
+
+  // Hostels
+  getHostelBlocks,
+  getHostelBlock,
+  createHostelBlock,
+  updateHostelBlock,
+  deleteHostelBlock,
+  getRooms,
+  getRoom,
+  createRoom,
+  updateRoom,
+  deleteRoom,
+  getRoomAllocations,
+  createRoomAllocation,
+  updateRoomAllocation,
+  deleteRoomAllocation,
+  getHostelStats,
 };
 
 export default adminService;
