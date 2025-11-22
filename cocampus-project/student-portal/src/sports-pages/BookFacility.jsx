@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -9,19 +9,43 @@ import {
   CheckCircle,
   Info
 } from 'lucide-react';
+import { sportsService } from '../services/sportsService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const BookFacility = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
   const preSelectedFacility = location.state?.facility;
 
-  const [facilities] = useState([
-    { id: 1, name: 'Cricket Stadium', price: 5000, icon: '🏏' },
-    { id: 2, name: 'Badminton Court', price: 400, icon: '🏸' },
-    { id: 3, name: 'Volleyball Court', price: 800, icon: '🏐' },
-    { id: 4, name: 'Kabaddi Court', price: 600, icon: '🤼' },
-    { id: 5, name: 'Table Tennis', price: 200, icon: '🏓' }
-  ]);
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Facilities State
+  const [facilities, setFacilities] = useState([]);
+
+  // Load Facilities
+  useEffect(() => {
+    loadFacilities();
+  }, []);
+
+  const loadFacilities = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await sportsService.getFacilities();
+      setFacilities(data || []);
+    } catch (err) {
+      console.error('Error loading facilities:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [formData, setFormData] = useState({
     facility: preSelectedFacility?.id?.toString() || '',
@@ -47,20 +71,43 @@ const BookFacility = () => {
     { value: '4', label: '4 hours' }
   ];
 
-  const selectedFacility = facilities.find(f => f.id.toString() === formData.facility);
-  const totalAmount = selectedFacility ? selectedFacility.price * parseInt(formData.duration) : 0;
+  const selectedFacility = facilities.find(f => f?.id?.toString() === formData.facility);
+  const totalAmount = selectedFacility ? (selectedFacility?.price || selectedFacility?.priceRegular || 0) * parseInt(formData.duration) : 0;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setShowConfirmation(true);
   };
 
-  const handleConfirmBooking = () => {
-    alert('Booking request submitted successfully! You will receive confirmation shortly.');
-    navigate('/sports/my-bookings');
+  const handleConfirmBooking = async () => {
+    try {
+      setSubmitting(true);
+      const bookingData = {
+        facilityId: formData.facility,
+        date: formData.date,
+        startTime: formData.startTime,
+        duration: parseInt(formData.duration),
+        paymentMethod: formData.paymentMethod,
+        notes: formData.notes
+      };
+
+      await sportsService.createEvent(bookingData); // Note: Using createEvent as per service available methods
+      toast.success('Booking request submitted successfully! You will receive confirmation shortly.');
+      navigate('/sports/my-bookings');
+    } catch (err) {
+      console.error('Error creating booking:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit booking request');
+      setShowConfirmation(false);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Loading and Error Screens
+  if (loading) return <Loading fullScreen message="Loading booking form..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadFacilities} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -86,18 +133,18 @@ const BookFacility = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {facilities.map((facility) => (
                   <button
-                    key={facility.id}
+                    key={facility?.id}
                     type="button"
-                    onClick={() => setFormData({ ...formData, facility: facility.id.toString() })}
+                    onClick={() => setFormData({ ...formData, facility: facility?.id?.toString() })}
                     className={`p-4 rounded-lg border-2 transition-colors text-center ${
-                      formData.facility === facility.id.toString()
+                      formData.facility === facility?.id?.toString()
                         ? 'border-emerald-500 bg-emerald-50'
                         : 'border-gray-200 hover:border-emerald-200'
                     }`}
                   >
-                    <div className="text-2xl mb-1">{facility.icon}</div>
-                    <p className="text-sm font-medium text-gray-900">{facility.name}</p>
-                    <p className="text-xs text-emerald-600">₹{facility.price}/hr</p>
+                    <div className="text-2xl mb-1">{facility?.icon || facility?.image || '🏅'}</div>
+                    <p className="text-sm font-medium text-gray-900">{facility?.name || 'Unknown'}</p>
+                    <p className="text-xs text-emerald-600">₹{facility?.price || facility?.priceRegular || 0}/hr</p>
                   </button>
                 ))}
               </div>
@@ -225,10 +272,10 @@ const BookFacility = () => {
           {selectedFacility ? (
             <div className="space-y-4">
               <div className="flex items-center space-x-3 p-3 bg-emerald-50 rounded-lg">
-                <span className="text-2xl">{selectedFacility.icon}</span>
+                <span className="text-2xl">{selectedFacility?.icon || selectedFacility?.image || '🏅'}</span>
                 <div>
-                  <p className="font-medium text-gray-900">{selectedFacility.name}</p>
-                  <p className="text-sm text-emerald-600">₹{selectedFacility.price}/hour</p>
+                  <p className="font-medium text-gray-900">{selectedFacility?.name || 'Unknown Facility'}</p>
+                  <p className="text-sm text-emerald-600">₹{selectedFacility?.price || selectedFacility?.priceRegular || 0}/hour</p>
                 </div>
               </div>
 
@@ -321,15 +368,17 @@ const BookFacility = () => {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowConfirmation(false)}
-                className="py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={submitting}
+                className="py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmBooking}
-                className="py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+                disabled={submitting}
+                className="py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                Confirm
+                {submitting ? 'Processing...' : 'Confirm'}
               </button>
             </div>
           </motion.div>

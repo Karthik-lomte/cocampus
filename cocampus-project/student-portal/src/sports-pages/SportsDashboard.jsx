@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,57 +10,53 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
+import { sportsService } from '../services/sportsService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const SportsDashboard = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
-  const [upcomingBookings] = useState([
-    {
-      id: 'BK001',
-      facility: 'Badminton Court 3',
-      date: '2024-11-22',
-      time: '10:00 AM - 11:00 AM',
-      status: 'confirmed'
-    },
-    {
-      id: 'BK002',
-      facility: 'Table Tennis',
-      date: '2024-11-24',
-      time: '4:00 PM - 5:00 PM',
-      status: 'pending'
-    }
-  ]);
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [featuredFacilities] = useState([
-    {
-      id: 1,
-      name: 'Cricket Stadium',
-      image: '🏏',
-      price: 5000,
-      available: true
-    },
-    {
-      id: 2,
-      name: 'Badminton Courts',
-      image: '🏸',
-      price: 400,
-      available: true
-    },
-    {
-      id: 3,
-      name: 'Volleyball Courts',
-      image: '🏐',
-      price: 800,
-      available: true
-    },
-    {
-      id: 4,
-      name: 'Table Tennis',
-      image: '🏓',
-      price: 200,
-      available: true
+  // Dashboard Data
+  const [dashboardStats, setDashboardStats] = useState({
+    totalBookings: 0,
+    upcomingBookings: 0,
+    facilitiesAvailable: 0
+  });
+  const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [featuredFacilities, setFeaturedFacilities] = useState([]);
+
+  // Load Dashboard Data
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await sportsService.getDashboard();
+
+      setDashboardStats({
+        totalBookings: data?.totalBookings || 0,
+        upcomingBookings: data?.upcomingBookings?.length || 0,
+        facilitiesAvailable: data?.facilitiesAvailable || 0
+      });
+      setUpcomingBookings(data?.upcomingBookings || []);
+      setFeaturedFacilities(data?.featuredFacilities || []);
+    } catch (err) {
+      console.error('Error loading sports dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -70,6 +66,10 @@ const SportsDashboard = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Loading and Error Screens
+  if (loading) return <Loading fullScreen message="Loading sports dashboard..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -101,7 +101,7 @@ const SportsDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Bookings</p>
-              <p className="text-3xl font-bold text-gray-900">12</p>
+              <p className="text-3xl font-bold text-gray-900">{dashboardStats.totalBookings}</p>
             </div>
             <div className="p-3 bg-emerald-100 rounded-lg">
               <Calendar className="w-6 h-6 text-emerald-600" />
@@ -118,7 +118,7 @@ const SportsDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Upcoming</p>
-              <p className="text-3xl font-bold text-gray-900">{upcomingBookings.length}</p>
+              <p className="text-3xl font-bold text-gray-900">{dashboardStats.upcomingBookings}</p>
             </div>
             <div className="p-3 bg-blue-100 rounded-lg">
               <Clock className="w-6 h-6 text-blue-600" />
@@ -135,7 +135,7 @@ const SportsDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Facilities Available</p>
-              <p className="text-3xl font-bold text-gray-900">5</p>
+              <p className="text-3xl font-bold text-gray-900">{dashboardStats.facilitiesAvailable}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-lg">
               <Trophy className="w-6 h-6 text-purple-600" />
@@ -162,24 +162,24 @@ const SportsDashboard = () => {
             </button>
           </div>
         </div>
-        {upcomingBookings.length > 0 ? (
+        {upcomingBookings?.length > 0 ? (
           <div className="divide-y divide-gray-100">
             {upcomingBookings.map((booking) => (
-              <div key={booking.id} className="p-4 hover:bg-gray-50">
+              <div key={booking?.id} className="p-4 hover:bg-gray-50">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">{booking.facility}</p>
+                    <p className="font-medium text-gray-900">{booking?.facility || 'Unknown Facility'}</p>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                       <Calendar className="w-4 h-4 mr-1" />
-                      {booking.date}
+                      {booking?.date || 'N/A'}
                       <span className="mx-2">•</span>
                       <Clock className="w-4 h-4 mr-1" />
-                      {booking.time}
+                      {booking?.time || 'N/A'}
                     </div>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(booking.status)}`}>
-                    {booking.status === 'confirmed' ? <CheckCircle className="w-3 h-3 inline mr-1" /> : <AlertCircle className="w-3 h-3 inline mr-1" />}
-                    {booking.status}
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(booking?.status)}`}>
+                    {booking?.status === 'confirmed' ? <CheckCircle className="w-3 h-3 inline mr-1" /> : <AlertCircle className="w-3 h-3 inline mr-1" />}
+                    {booking?.status || 'pending'}
                   </span>
                 </div>
               </div>
@@ -218,15 +218,15 @@ const SportsDashboard = () => {
           </div>
         </div>
         <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          {featuredFacilities.map((facility) => (
+          {featuredFacilities?.map((facility) => (
             <button
-              key={facility.id}
+              key={facility?.id}
               onClick={() => navigate('/sports/book')}
               className="p-4 bg-gray-50 rounded-lg hover:bg-emerald-50 transition-colors text-center"
             >
-              <div className="text-4xl mb-2">{facility.image}</div>
-              <p className="font-medium text-gray-900 text-sm">{facility.name}</p>
-              <p className="text-xs text-emerald-600 mt-1">₹{facility.price}/hr</p>
+              <div className="text-4xl mb-2">{facility?.image || facility?.icon || '🏅'}</div>
+              <p className="font-medium text-gray-900 text-sm">{facility?.name || 'Unknown Facility'}</p>
+              <p className="text-xs text-emerald-600 mt-1">₹{facility?.price || 0}/hr</p>
             </button>
           ))}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -10,69 +10,45 @@ import {
   XCircle,
   Filter
 } from 'lucide-react';
+import { sportsService } from '../services/sportsService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const MyBookings = () => {
-  const [bookings, setBookings] = useState([
-    {
-      id: 'BK001',
-      facility: 'Badminton Court 3',
-      icon: '🏸',
-      date: '2024-11-22',
-      time: '10:00 AM - 11:00 AM',
-      duration: '1 hour',
-      amount: 400,
-      status: 'confirmed',
-      paymentStatus: 'paid',
-      location: 'Indoor Complex, 1st Floor',
-      bookingDate: '2024-11-18'
-    },
-    {
-      id: 'BK002',
-      facility: 'Table Tennis',
-      icon: '🏓',
-      date: '2024-11-24',
-      time: '4:00 PM - 5:00 PM',
-      duration: '1 hour',
-      amount: 200,
-      status: 'pending',
-      paymentStatus: 'unpaid',
-      location: 'Indoor Complex, Ground Floor',
-      bookingDate: '2024-11-19'
-    },
-    {
-      id: 'BK003',
-      facility: 'Cricket Stadium',
-      icon: '🏏',
-      date: '2024-11-15',
-      time: '6:00 AM - 9:00 AM',
-      duration: '3 hours',
-      amount: 15000,
-      status: 'completed',
-      paymentStatus: 'paid',
-      location: 'Sports Complex, Ground Floor',
-      bookingDate: '2024-11-10'
-    },
-    {
-      id: 'BK004',
-      facility: 'Volleyball Court',
-      icon: '🏐',
-      date: '2024-11-12',
-      time: '5:00 PM - 7:00 PM',
-      duration: '2 hours',
-      amount: 1600,
-      status: 'cancelled',
-      paymentStatus: 'refunded',
-      location: 'Outdoor Sports Area',
-      bookingDate: '2024-11-08',
-      cancelReason: 'Weather conditions'
-    }
-  ]);
+  const toast = useToast();
 
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Bookings State
+  const [bookings, setBookings] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
 
+  // Load Bookings Data
+  useEffect(() => {
+    loadBookings();
+  }, []);
+
+  const loadBookings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await sportsService.getBookings();
+      setBookings(data || []);
+    } catch (err) {
+      console.error('Error loading bookings:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredBookings = bookings.filter(booking =>
-    statusFilter === 'all' || booking.status === statusFilter
+    statusFilter === 'all' || booking?.status === statusFilter
   );
 
   const getStatusIcon = (status) => {
@@ -95,25 +71,44 @@ const MyBookings = () => {
     }
   };
 
-  const handleCancelBooking = (bookingId) => {
-    if (window.confirm('Are you sure you want to cancel this booking?')) {
+  const handleCancelBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to cancel this booking?')) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const reason = 'Cancelled by user';
+      await sportsService.cancelBooking(bookingId, reason);
+
+      // Update local state
       setBookings(bookings.map(booking =>
-        booking.id === bookingId ? { ...booking, status: 'cancelled', paymentStatus: 'refund_pending' } : booking
+        booking?.id === bookingId ? { ...booking, status: 'cancelled', paymentStatus: 'refund_pending' } : booking
       ));
       if (selectedBooking?.id === bookingId) {
         setSelectedBooking({ ...selectedBooking, status: 'cancelled', paymentStatus: 'refund_pending' });
       }
-      alert('Booking cancelled. Refund will be processed within 3-5 business days.');
+
+      toast.success('Booking cancelled. Refund will be processed within 3-5 business days.');
+    } catch (err) {
+      console.error('Error cancelling booking:', err);
+      toast.error(err.response?.data?.message || 'Failed to cancel booking');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const bookingStats = {
     total: bookings.length,
-    confirmed: bookings.filter(b => b.status === 'confirmed').length,
-    pending: bookings.filter(b => b.status === 'pending').length,
-    completed: bookings.filter(b => b.status === 'completed').length,
-    cancelled: bookings.filter(b => b.status === 'cancelled').length
+    confirmed: bookings.filter(b => b?.status === 'confirmed').length,
+    pending: bookings.filter(b => b?.status === 'pending').length,
+    completed: bookings.filter(b => b?.status === 'completed').length,
+    cancelled: bookings.filter(b => b?.status === 'cancelled').length
   };
+
+  // Loading and Error Screens
+  if (loading) return <Loading fullScreen message="Loading bookings..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadBookings} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -169,40 +164,40 @@ const MyBookings = () => {
       <div className="space-y-4">
         {filteredBookings.map((booking) => (
           <motion.div
-            key={booking.id}
+            key={booking?.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow"
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start space-x-4">
-                <div className="text-3xl">{booking.icon}</div>
+                <div className="text-3xl">{booking?.icon || '🏅'}</div>
                 <div>
                   <div className="flex items-center space-x-2 mb-1">
-                    <h3 className="font-semibold text-gray-900">{booking.facility}</h3>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                      {getStatusIcon(booking.status)}
-                      <span className="ml-1 capitalize">{booking.status}</span>
+                    <h3 className="font-semibold text-gray-900">{booking?.facility || 'Unknown Facility'}</h3>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(booking?.status)}`}>
+                      {getStatusIcon(booking?.status)}
+                      <span className="ml-1 capitalize">{booking?.status || 'pending'}</span>
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center text-sm text-gray-600 gap-x-4 gap-y-1">
                     <span className="flex items-center">
                       <Calendar className="w-4 h-4 mr-1" />
-                      {booking.date}
+                      {booking?.date || 'N/A'}
                     </span>
                     <span className="flex items-center">
                       <Clock className="w-4 h-4 mr-1" />
-                      {booking.time}
+                      {booking?.time || 'N/A'}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Booking ID: {booking.id}</p>
+                  <p className="text-xs text-gray-500 mt-1">Booking ID: {booking?.id || 'N/A'}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
                 <div className="text-right">
-                  <p className="font-bold text-gray-900">₹{booking.amount.toLocaleString()}</p>
-                  <p className={`text-xs ${booking.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {booking.paymentStatus === 'paid' ? 'Paid' : booking.paymentStatus === 'refunded' ? 'Refunded' : 'Unpaid'}
+                  <p className="font-bold text-gray-900">₹{(booking?.amount || 0).toLocaleString()}</p>
+                  <p className={`text-xs ${booking?.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
+                    {booking?.paymentStatus === 'paid' ? 'Paid' : booking?.paymentStatus === 'refunded' ? 'Refunded' : 'Unpaid'}
                   </p>
                 </div>
                 <button
@@ -249,52 +244,52 @@ const MyBookings = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div className="flex items-center space-x-3 p-3 bg-emerald-50 rounded-lg">
-                  <span className="text-3xl">{selectedBooking.icon}</span>
+                  <span className="text-3xl">{selectedBooking?.icon || '🏅'}</span>
                   <div>
-                    <p className="font-semibold text-gray-900">{selectedBooking.facility}</p>
-                    <p className="text-sm text-gray-600">{selectedBooking.location}</p>
+                    <p className="font-semibold text-gray-900">{selectedBooking?.facility || 'Unknown Facility'}</p>
+                    <p className="text-sm text-gray-600">{selectedBooking?.location || 'N/A'}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Booking ID</span>
-                    <span className="font-medium">{selectedBooking.id}</span>
+                    <span className="font-medium">{selectedBooking?.id || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Date</span>
-                    <span className="font-medium">{selectedBooking.date}</span>
+                    <span className="font-medium">{selectedBooking?.date || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Time</span>
-                    <span className="font-medium">{selectedBooking.time}</span>
+                    <span className="font-medium">{selectedBooking?.time || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Duration</span>
-                    <span className="font-medium">{selectedBooking.duration}</span>
+                    <span className="font-medium">{selectedBooking?.duration || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Status</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedBooking.status)}`}>
-                      {selectedBooking.status}
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedBooking?.status)}`}>
+                      {selectedBooking?.status || 'pending'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Payment</span>
-                    <span className={`font-medium ${selectedBooking.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {selectedBooking.paymentStatus === 'paid' ? 'Paid' : selectedBooking.paymentStatus === 'refunded' ? 'Refunded' : 'Unpaid'}
+                    <span className={`font-medium ${selectedBooking?.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {selectedBooking?.paymentStatus === 'paid' ? 'Paid' : selectedBooking?.paymentStatus === 'refunded' ? 'Refunded' : 'Unpaid'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Booked On</span>
-                    <span className="font-medium">{selectedBooking.bookingDate}</span>
+                    <span className="font-medium">{selectedBooking?.bookingDate || 'N/A'}</span>
                   </div>
                 </div>
 
-                {selectedBooking.cancelReason && (
+                {selectedBooking?.cancelReason && (
                   <div className="p-3 bg-red-50 rounded-lg">
                     <p className="text-sm text-red-800">
-                      <strong>Cancel Reason:</strong> {selectedBooking.cancelReason}
+                      <strong>Cancel Reason:</strong> {selectedBooking?.cancelReason}
                     </p>
                   </div>
                 )}
@@ -302,22 +297,24 @@ const MyBookings = () => {
                 <div className="pt-4 border-t border-gray-100">
                   <div className="flex justify-between">
                     <span className="font-medium text-gray-900">Total Amount</span>
-                    <span className="text-xl font-bold text-emerald-600">₹{selectedBooking.amount.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-emerald-600">₹{(selectedBooking?.amount || 0).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
               <div className="p-6 border-t border-gray-100 space-y-3">
-                {(selectedBooking.status === 'confirmed' || selectedBooking.status === 'pending') && (
+                {(selectedBooking?.status === 'confirmed' || selectedBooking?.status === 'pending') && (
                   <button
-                    onClick={() => handleCancelBooking(selectedBooking.id)}
-                    className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    onClick={() => handleCancelBooking(selectedBooking?.id)}
+                    disabled={submitting}
+                    className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
-                    Cancel Booking
+                    {submitting ? 'Cancelling...' : 'Cancel Booking'}
                   </button>
                 )}
                 <button
                   onClick={() => setSelectedBooking(null)}
-                  className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={submitting}
+                  className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Close
                 </button>
