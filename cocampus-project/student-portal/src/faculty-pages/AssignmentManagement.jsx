@@ -1,19 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Upload, Eye, CheckCircle, Clock, FileText, X, Download, User, Edit2, Lock, Unlock } from 'lucide-react';
-import { facultyAssignmentsData } from '../faculty-data/assignmentsData';
-import { facultyData } from '../faculty-data/facultyData';
-import { studentsData } from '../faculty-data/studentsData';
+import { facultyService } from '../services/facultyService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function AssignmentManagement() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [grading, setGrading] = useState(false);
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
   const [showSubmissions, setShowSubmissions] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
   const [gradingData, setGradingData] = useState({});
-  const [submissionStatuses, setSubmissionStatuses] = useState({});
-  const [assignmentSubmissionControl, setAssignmentSubmissionControl] = useState({});
   const [formData, setFormData] = useState({
     title: '',
     subject: '',
@@ -21,93 +30,143 @@ function AssignmentManagement() {
     description: '',
     dueDate: '',
     maxMarks: '',
-    lateSubmission: false
+    lateSubmission: false,
+    file: null
   });
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    loadAssignments();
+  }, []);
+
+  const loadAssignments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await facultyService.getAssignments();
+      setAssignments(data.assignments || data || []);
+      setSubjects(data.subjects || []);
+    } catch (err) {
+      console.error('Assignments error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert('Assignment created successfully!');
-    setShowCreateForm(false);
-    setFormData({
-      title: '',
-      subject: '',
-      class: '',
-      description: '',
-      dueDate: '',
-      maxMarks: '',
-      lateSubmission: false
-    });
+    try {
+      setCreating(true);
+      const assignmentData = new FormData();
+      assignmentData.append('title', formData.title);
+      assignmentData.append('subject', formData.subject);
+      assignmentData.append('class', formData.class);
+      assignmentData.append('description', formData.description);
+      assignmentData.append('dueDate', formData.dueDate);
+      assignmentData.append('maxMarks', formData.maxMarks);
+      assignmentData.append('lateSubmission', formData.lateSubmission);
+      if (formData.file) {
+        assignmentData.append('file', formData.file);
+      }
+
+      await facultyService.createAssignment(assignmentData);
+      toast.success('Assignment created successfully!');
+      setShowCreateForm(false);
+      setFormData({
+        title: '',
+        subject: '',
+        class: '',
+        description: '',
+        dueDate: '',
+        maxMarks: '',
+        lateSubmission: false,
+        file: null
+      });
+      await loadAssignments();
+    } catch (err) {
+      console.error('Create assignment error:', err);
+      toast.error(err.response?.data?.message || 'Failed to create assignment');
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const handleViewSubmissions = (assignment) => {
-    setSelectedAssignment(assignment);
-    setShowSubmissions(true);
-    // Initialize submission statuses
-    const initialStatuses = {};
-    const submissions = generateSubmissions(assignment);
-    submissions.forEach(submission => {
-      initialStatuses[submission.studentRoll] = submission.status;
-    });
-    setSubmissionStatuses(initialStatuses);
+  const handleViewSubmissions = async (assignment) => {
+    try {
+      setLoadingSubmissions(true);
+      setSelectedAssignment(assignment);
+      const data = await facultyService.getAssignmentSubmissions(assignment._id || assignment.id);
+      setSubmissions(data.submissions || data || []);
+      setShowSubmissions(true);
+    } catch (err) {
+      console.error('Load submissions error:', err);
+      toast.error('Failed to load submissions');
+    } finally {
+      setLoadingSubmissions(false);
+    }
   };
 
-  const handleStatusChange = (rollNo, newStatus) => {
-    setSubmissionStatuses(prev => ({
-      ...prev,
-      [rollNo]: newStatus
-    }));
-    // This would typically sync with the backend and update student view
-    alert(`Submission status updated to "${newStatus}" for student ${rollNo}. This will be reflected in student portal.`);
+  const handleGradeNow = async (assignment) => {
+    try {
+      setLoadingSubmissions(true);
+      setSelectedEvaluation(assignment);
+      const data = await facultyService.getAssignmentSubmissions(assignment._id || assignment.id);
+      const pendingSubmissions = (data.submissions || data || []).filter(s => !s.marks && s.status === 'submitted');
+      setSubmissions(pendingSubmissions);
+
+      // Initialize grading data
+      const initialGradingData = {};
+      pendingSubmissions.forEach(submission => {
+        initialGradingData[submission.studentRoll || submission.student?.rollNo] = {
+          marks: '',
+          feedback: ''
+        };
+      });
+      setGradingData(initialGradingData);
+      setShowGradingModal(true);
+    } catch (err) {
+      console.error('Load submissions error:', err);
+      toast.error('Failed to load submissions');
+    } finally {
+      setLoadingSubmissions(false);
+    }
   };
 
-  const handleToggleSubmission = (assignmentId) => {
-    const currentStatus = assignmentSubmissionControl[assignmentId] !== false; // Default is true (active)
-    const newStatus = !currentStatus;
-
-    setAssignmentSubmissionControl(prev => ({
-      ...prev,
-      [assignmentId]: newStatus
-    }));
-
-    const statusText = newStatus ? 'ACTIVE' : 'INACTIVE';
-    const message = newStatus
-      ? `Submission is now ACTIVE. Students can submit this assignment.`
-      : `Submission is now INACTIVE. Students cannot submit this assignment.`;
-
-    alert(message);
-  };
-
-  const isSubmissionActive = (assignmentId) => {
-    // Default is true (active) if not set
-    return assignmentSubmissionControl[assignmentId] !== false;
-  };
-
-  const handleGradeNow = (evaluation) => {
-    setSelectedEvaluation(evaluation);
-    setShowGradingModal(true);
-    // Initialize grading data for all pending submissions
-    const initialGradingData = {};
-    const pendingSubmissions = generatePendingSubmissions(evaluation);
-    pendingSubmissions.forEach(submission => {
-      initialGradingData[submission.studentRoll] = {
-        marks: '',
-        feedback: ''
-      };
-    });
-    setGradingData(initialGradingData);
-  };
-
-  const handleSaveGrades = () => {
-    // Count how many students were graded
-    const gradedCount = Object.values(gradingData).filter(data => data.marks !== '').length;
+  const handleSaveGrades = async () => {
+    const gradedCount = Object.entries(gradingData).filter(([_, data]) => data.marks !== '').length;
     if (gradedCount === 0) {
-      alert('Please grade at least one student before saving.');
+      toast.error('Please grade at least one student before saving.');
       return;
     }
-    alert(`Successfully graded ${gradedCount} student(s)!`);
-    setShowGradingModal(false);
-    setSelectedEvaluation(null);
-    setGradingData({});
+
+    try {
+      setGrading(true);
+      // Grade each submission
+      const gradePromises = Object.entries(gradingData)
+        .filter(([_, data]) => data.marks !== '')
+        .map(([rollNo, data]) => {
+          const submission = submissions.find(s => (s.studentRoll || s.student?.rollNo) === rollNo);
+          if (submission) {
+            return facultyService.gradeSubmission(submission._id || submission.id, {
+              marks: parseFloat(data.marks),
+              feedback: data.feedback
+            });
+          }
+          return Promise.resolve();
+        });
+
+      await Promise.all(gradePromises);
+      toast.success(`Successfully graded ${gradedCount} student(s)!`);
+      setShowGradingModal(false);
+      setSelectedEvaluation(null);
+      setGradingData({});
+      await loadAssignments();
+    } catch (err) {
+      console.error('Grade submissions error:', err);
+      toast.error(err.response?.data?.message || 'Failed to save grades');
+    } finally {
+      setGrading(false);
+    }
   };
 
   const updateGrading = (rollNo, field, value) => {
@@ -124,35 +183,21 @@ function AssignmentManagement() {
     const styles = {
       active: 'bg-blue-100 text-blue-700',
       completed: 'bg-green-100 text-green-700',
-      expired: 'bg-red-100 text-red-700'
+      expired: 'bg-red-100 text-red-700',
+      pending: 'bg-orange-100 text-orange-700'
     };
-    return <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
+    return <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
       {status.toUpperCase()}
     </span>;
   };
 
-  // Generate mock submissions based on assignment
-  const generateSubmissions = (assignment) => {
-    const classStudents = studentsData[assignment.class] || [];
-    return classStudents.slice(0, assignment.submittedCount).map((student, index) => ({
-      studentName: student.name,
-      studentRoll: student.rollNo,
-      submittedDate: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-      status: Math.random() > 0.5 ? 'On Time' : 'Late',
-      marksObtained: Math.random() > 0.5 ? Math.floor(Math.random() * assignment.maxMarks) : null
-    }));
-  };
+  if (loading) return <Loading fullScreen message="Loading assignments..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadAssignments} fullScreen />;
 
-  // Generate pending submissions for grading
-  const generatePendingSubmissions = (evaluation) => {
-    const classStudents = studentsData[evaluation.class] || [];
-    return classStudents.slice(0, evaluation.pendingCount).map((student, index) => ({
-      studentName: student.name,
-      studentRoll: student.rollNo,
-      submittedDate: new Date(Date.now() - Math.random() * 5 * 24 * 60 * 60 * 1000).toISOString(),
-      status: Math.random() > 0.7 ? 'On Time' : 'Late'
-    }));
-  };
+  const pendingEvaluations = assignments.filter(a => {
+    const pending = (a.submittedCount || 0) - (a.evaluatedCount || 0);
+    return pending > 0;
+  });
 
   return (
     <div className="space-y-6">
@@ -207,8 +252,10 @@ function AssignmentManagement() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="">Select Subject</option>
-                  {facultyData.assignedSubjects.map(subject => (
-                    <option key={subject.code} value={subject.code}>{subject.name}</option>
+                  {subjects.map(subject => (
+                    <option key={subject._id || subject.code} value={subject.code || subject.subjectCode}>
+                      {subject.name || subject.subjectName}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -258,6 +305,7 @@ function AssignmentManagement() {
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx"
+                  onChange={(e) => setFormData({ ...formData, file: e.target.files[0] })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
@@ -291,15 +339,17 @@ function AssignmentManagement() {
               <button
                 type="button"
                 onClick={() => setShowCreateForm(false)}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={creating}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow"
+                disabled={creating}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50"
               >
-                Create Assignment
+                {creating ? 'Creating...' : 'Create Assignment'}
               </button>
             </div>
           </form>
@@ -317,7 +367,13 @@ function AssignmentManagement() {
           <h2 className="text-xl font-bold text-gray-900">Created Assignments</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {facultyAssignmentsData.createdAssignments.map((assignment, index) => (
+          {assignments.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <FileText size={48} className="mx-auto mb-4 text-gray-300" />
+              <p>No assignments created yet</p>
+            </div>
+          ) : (
+            assignments.map((assignment, index) => (
             <motion.div
               key={assignment.id}
               initial={{ opacity: 0 }}
@@ -331,41 +387,18 @@ function AssignmentManagement() {
                     <FileText className="text-green-600 mt-1" size={20} />
                     <div>
                       <h3 className="font-bold text-gray-900">{assignment.title}</h3>
-                      <p className="text-sm text-gray-600">{assignment.subject} • {assignment.class}</p>
+                      <p className="text-sm text-gray-600">{assignment.subject || assignment.subjectName} • {assignment.class || assignment.className}</p>
                     </div>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">{assignment.description}</p>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                     <span>Due: {new Date(assignment.dueDate).toLocaleDateString()}</span>
                     <span>Max Marks: {assignment.maxMarks}</span>
-                    <span>Submitted: {assignment.submittedCount}/{assignment.totalStudents}</span>
+                    <span>Submitted: {assignment.submittedCount || 0}/{assignment.totalStudents || 0}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   {getStatusBadge(assignment.status)}
-
-                  {/* Submission Control Toggle */}
-                  <button
-                    onClick={() => handleToggleSubmission(assignment.id)}
-                    className={`px-4 py-2 text-white text-sm rounded-lg transition-all flex items-center justify-center gap-2 ${
-                      isSubmissionActive(assignment.id)
-                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:shadow-lg'
-                        : 'bg-gradient-to-r from-red-600 to-orange-600 hover:shadow-lg'
-                    }`}
-                  >
-                    {isSubmissionActive(assignment.id) ? (
-                      <>
-                        <Unlock size={16} />
-                        Active
-                      </>
-                    ) : (
-                      <>
-                        <Lock size={16} />
-                        Inactive
-                      </>
-                    )}
-                  </button>
-
                   <button
                     onClick={() => handleViewSubmissions(assignment)}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
@@ -376,7 +409,8 @@ function AssignmentManagement() {
                 </div>
               </div>
             </motion.div>
-          ))}
+            ))
+          )}
         </div>
       </motion.div>
 
@@ -391,30 +425,40 @@ function AssignmentManagement() {
           <h2 className="text-xl font-bold text-gray-900">Pending Evaluations</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {facultyAssignmentsData.pendingEvaluations.map((item, index) => (
-            <motion.div
-              key={item.assignmentId}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: index * 0.1 }}
-              className="p-6 flex justify-between items-center hover:bg-gray-50"
-            >
-              <div>
-                <h3 className="font-bold text-gray-900">{item.title}</h3>
-                <p className="text-sm text-gray-600">{item.class}</p>
-                <div className="mt-2 flex gap-4 text-sm">
-                  <span className="text-green-600">Evaluated: {item.evaluatedCount}</span>
-                  <span className="text-orange-600">Pending: {item.pendingCount}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => handleGradeNow(item)}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-              >
-                Grade Now
-              </button>
-            </motion.div>
-          ))}
+          {pendingEvaluations.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <CheckCircle size={48} className="mx-auto mb-4 text-gray-300" />
+              <p>No pending evaluations</p>
+            </div>
+          ) : (
+            pendingEvaluations.map((item, index) => {
+              const pendingCount = (item.submittedCount || 0) - (item.evaluatedCount || 0);
+              return (
+                <motion.div
+                  key={item._id || item.id || index}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="p-6 flex justify-between items-center hover:bg-gray-50"
+                >
+                  <div>
+                    <h3 className="font-bold text-gray-900">{item.title}</h3>
+                    <p className="text-sm text-gray-600">{item.class || item.className}</p>
+                    <div className="mt-2 flex gap-4 text-sm">
+                      <span className="text-green-600">Evaluated: {item.evaluatedCount || 0}</span>
+                      <span className="text-orange-600">Pending: {pendingCount}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleGradeNow(item)}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Grade Now
+                  </button>
+                </motion.div>
+              );
+            })
+          )}
         </div>
       </motion.div>
 
@@ -493,51 +537,66 @@ function AssignmentManagement() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {generateSubmissions(selectedAssignment).map((submission, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{submission.studentRoll}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900">{submission.studentName}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">
-                              {new Date(submission.submittedDate).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4">
-                              <select
-                                value={submissionStatuses[submission.studentRoll] || submission.status}
-                                onChange={(e) => handleStatusChange(submission.studentRoll, e.target.value)}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium border-2 focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                                  (submissionStatuses[submission.studentRoll] || submission.status) === 'On Time'
-                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                    : (submissionStatuses[submission.studentRoll] || submission.status) === 'Late'
-                                    ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                    : (submissionStatuses[submission.studentRoll] || submission.status) === 'Not Submitted'
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}
-                              >
-                                <option value="On Time">On Time</option>
-                                <option value="Late">Late</option>
-                                <option value="Not Submitted">Not Submitted</option>
-                                <option value="Excused">Excused</option>
-                                <option value="Resubmitted">Resubmitted</option>
-                              </select>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              {submission.marksObtained !== null ? (
-                                <span className="font-semibold text-green-600">
-                                  {submission.marksObtained}/{selectedAssignment.maxMarks}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">Not Graded</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <button className="text-green-600 hover:text-green-700 flex items-center gap-1">
-                                <Download size={16} />
-                                <span className="text-sm">Download</span>
-                              </button>
+                        {loadingSubmissions ? (
+                          <tr>
+                            <td colSpan="6" className="px-6 py-8 text-center">
+                              <div className="inline-block w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                              <p className="mt-2 text-gray-600">Loading submissions...</p>
                             </td>
                           </tr>
-                        ))}
+                        ) : submissions.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                              No submissions yet
+                            </td>
+                          </tr>
+                        ) : (
+                          submissions.map((submission, index) => {
+                            const studentRoll = submission.studentRoll || submission.student?.rollNo;
+                            const studentName = submission.studentName || submission.student?.name;
+                            return (
+                              <tr key={submission._id || submission.id || index} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{studentRoll}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900">{studentName}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  {submission.submittedDate ? new Date(submission.submittedDate).toLocaleString() : 'N/A'}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-3 py-1 rounded-lg text-xs font-medium ${
+                                    submission.status === 'on_time' || submission.status === 'On Time'
+                                      ? 'bg-green-100 text-green-700'
+                                      : submission.status === 'late' || submission.status === 'Late'
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {submission.status || 'Submitted'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm">
+                                  {submission.marks !== undefined && submission.marks !== null ? (
+                                    <span className="font-semibold text-green-600">
+                                      {submission.marks}/{selectedAssignment.maxMarks}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">Not Graded</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  {submission.fileUrl && (
+                                    <a
+                                      href={submission.fileUrl}
+                                      download
+                                      className="text-green-600 hover:text-green-700 flex items-center gap-1"
+                                    >
+                                      <Download size={16} />
+                                      <span className="text-sm">Download</span>
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -671,105 +730,114 @@ function AssignmentManagement() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {generatePendingSubmissions(selectedEvaluation).map((submission, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{submission.studentRoll}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{submission.studentName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {new Date(submission.submittedDate).toLocaleDateString()}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              submission.status === 'On Time' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {submission.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              placeholder="Marks"
-                              value={gradingData[submission.studentRoll]?.marks || ''}
-                              onChange={(e) => updateGrading(submission.studentRoll, 'marks', e.target.value)}
-                              className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="text"
-                              placeholder="Feedback (optional)"
-                              value={gradingData[submission.studentRoll]?.feedback || ''}
-                              onChange={(e) => updateGrading(submission.studentRoll, 'feedback', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                      {submissions.map((submission, index) => {
+                        const studentRoll = submission.studentRoll || submission.student?.rollNo;
+                        const studentName = submission.studentName || submission.student?.name;
+                        return (
+                          <tr key={submission._id || submission.id || index} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{studentRoll}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{studentName}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {submission.submittedDate ? new Date(submission.submittedDate).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                submission.status === 'on_time' || submission.status === 'On Time' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {submission.status || 'Submitted'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                placeholder="Marks"
+                                value={gradingData[studentRoll]?.marks || ''}
+                                onChange={(e) => updateGrading(studentRoll, 'marks', e.target.value)}
+                                className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                placeholder="Feedback (optional)"
+                                value={gradingData[studentRoll]?.feedback || ''}
+                                onChange={(e) => updateGrading(studentRoll, 'feedback', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile View - Grading Cards */}
                 <div className="md:hidden space-y-4">
-                  {generatePendingSubmissions(selectedEvaluation).map((submission, index) => (
-                    <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-4 space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-bold text-gray-900">{submission.studentName}</h4>
-                          <p className="text-sm text-gray-600">{submission.studentRoll}</p>
+                  {submissions.map((submission, index) => {
+                    const studentRoll = submission.studentRoll || submission.student?.rollNo;
+                    const studentName = submission.studentName || submission.student?.name;
+                    return (
+                      <div key={submission._id || submission.id || index} className="bg-white border-2 border-gray-200 rounded-xl p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-bold text-gray-900">{studentName}</h4>
+                            <p className="text-sm text-gray-600">{studentRoll}</p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            submission.status === 'on_time' || submission.status === 'On Time' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {submission.status || 'Submitted'}
+                          </span>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          submission.status === 'On Time' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                        }`}>
-                          {submission.status}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        <span className="font-medium">Submitted:</span> {new Date(submission.submittedDate).toLocaleDateString()}
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Marks *</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            placeholder="Enter marks"
-                            value={gradingData[submission.studentRoll]?.marks || ''}
-                            onChange={(e) => updateGrading(submission.studentRoll, 'marks', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                          />
+                        <div className="text-sm text-gray-600">
+                          <span className="font-medium">Submitted:</span> {submission.submittedDate ? new Date(submission.submittedDate).toLocaleDateString() : 'N/A'}
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Feedback (Optional)</label>
-                          <textarea
-                            rows={2}
-                            placeholder="Enter feedback"
-                            value={gradingData[submission.studentRoll]?.feedback || ''}
-                            onChange={(e) => updateGrading(submission.studentRoll, 'feedback', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                          />
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Marks *</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              placeholder="Enter marks"
+                              value={gradingData[studentRoll]?.marks || ''}
+                              onChange={(e) => updateGrading(studentRoll, 'marks', e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Feedback (Optional)</label>
+                            <textarea
+                              rows={2}
+                              placeholder="Enter feedback"
+                              value={gradingData[studentRoll]?.feedback || ''}
+                              onChange={(e) => updateGrading(studentRoll, 'feedback', e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    );
+                  })}
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
                   <button
                     onClick={() => setShowGradingModal(false)}
-                    className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    disabled={grading}
+                    className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveGrades}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium"
+                    disabled={grading}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium disabled:opacity-50"
                   >
-                    Save Grades
+                    {grading ? 'Saving Grades...' : 'Save Grades'}
                   </button>
                 </div>
               </div>
