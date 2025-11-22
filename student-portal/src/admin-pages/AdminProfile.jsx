@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User,
@@ -19,59 +19,80 @@ import {
   CheckCircle,
   MapPin,
   Clock,
-  Briefcase
+  Briefcase,
+  RefreshCw
 } from 'lucide-react';
+import { AuthContext } from '../context/AuthContext';
+import adminService from '../api/adminService';
 
 const AdminProfile = () => {
+  const { user, updateUser } = useContext(AuthContext);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({});
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [profile, setProfile] = useState({
-    name: 'Dr. Ramesh Kumar',
-    designation: 'System Administrator',
-    employeeId: 'ADM2018001',
-    email: 'admin@university.edu',
-    phone: '+91 9876543200',
-    office: 'Admin Block, Room 101',
-    department: 'Administration',
-    joinDate: '2018-06-15',
-    avatar: null
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: ''
   });
 
-  const [editForm, setEditForm] = useState({ ...profile });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
 
-  const statistics = {
-    managedUsers: 4250,
-    totalDepartments: 8,
-    pendingApprovals: 15,
-    resolvedIssues: 234,
-    activeYears: new Date().getFullYear() - 2018
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      setEditForm({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || ''
+      });
+    }
+  }, [user]);
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+      const response = await adminService.getDashboardStats();
+      if (response.success) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentActivity = [
-    { id: 1, action: 'Approved leave request', target: 'Dr. Priya Sharma', time: '10 minutes ago' },
-    { id: 2, action: 'Added new user', target: 'Rahul Kumar (Student)', time: '1 hour ago' },
-    { id: 3, action: 'Published notice', target: 'Exam Schedule 2024', time: '2 hours ago' },
-    { id: 4, action: 'Updated fee structure', target: 'CSE Department', time: '5 hours ago' },
-    { id: 5, action: 'Reset password', target: 'Faculty Member', time: '1 day ago' }
-  ];
-
-  const handleEditProfile = (e) => {
+  const handleEditProfile = async (e) => {
     e.preventDefault();
-    setProfile({ ...editForm });
-    setShowEditModal(false);
-    alert('Profile updated successfully!');
+    try {
+      const response = await adminService.updateUser(user._id, editForm);
+      if (response.success) {
+        if (updateUser) {
+          updateUser(response.data);
+        }
+        setShowEditModal(false);
+        alert('Profile updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert(error.response?.data?.message || 'Error updating profile. Please try again.');
+    }
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       alert('New passwords do not match!');
@@ -81,15 +102,49 @@ const AdminProfile = () => {
       alert('Password must be at least 8 characters long!');
       return;
     }
-    setShowPasswordModal(false);
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    alert('Password changed successfully!');
+    try {
+      const response = await adminService.resetUserPassword(user._id, {
+        newPassword: passwordForm.newPassword
+      });
+      if (response.success) {
+        setShowPasswordModal(false);
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        alert('Password changed successfully!');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      alert(error.response?.data?.message || 'Error changing password. Please try again.');
+    }
   };
 
   const openEditModal = () => {
-    setEditForm({ ...profile });
+    setEditForm({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || ''
+    });
     setShowEditModal(true);
   };
+
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  if (loading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -99,8 +154,19 @@ const AdminProfile = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-6 text-white"
       >
-        <h1 className="text-3xl font-bold mb-2">Admin Profile</h1>
-        <p className="text-indigo-100">Manage your account settings and preferences</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Admin Profile</h1>
+            <p className="text-indigo-100">Manage your account settings and preferences</p>
+          </div>
+          <button
+            onClick={fetchDashboardStats}
+            className="flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-5 h-5 mr-2" />
+            Refresh
+          </button>
+        </div>
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -130,9 +196,9 @@ const AdminProfile = () => {
 
             {/* Profile Info */}
             <div className="pt-14 pb-6 px-6 text-center">
-              <h2 className="text-xl font-bold text-gray-900">{profile.name}</h2>
-              <p className="text-indigo-600 font-medium">{profile.designation}</p>
-              <p className="text-sm text-gray-500 mt-1">{profile.employeeId}</p>
+              <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
+              <p className="text-indigo-600 font-medium">{user.role}</p>
+              <p className="text-sm text-gray-500 mt-1">{user.userId}</p>
 
               <div className="mt-4 flex items-center justify-center gap-2">
                 <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center">
@@ -141,161 +207,141 @@ const AdminProfile = () => {
                 </span>
                 <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full flex items-center">
                   <Shield className="w-3 h-3 mr-1" />
-                  Super Admin
+                  {user.role}
                 </span>
               </div>
 
               <div className="mt-6 space-y-3 text-left">
                 <div className="flex items-center text-sm text-gray-600">
                   <Mail className="w-4 h-4 mr-3 text-gray-400" />
-                  {profile.email}
+                  <span>{user.email}</span>
                 </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <Phone className="w-4 h-4 mr-3 text-gray-400" />
-                  {profile.phone}
-                </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <MapPin className="w-4 h-4 mr-3 text-gray-400" />
-                  {profile.office}
-                </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <Building2 className="w-4 h-4 mr-3 text-gray-400" />
-                  {profile.department}
-                </div>
+                {user.phone && (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Phone className="w-4 h-4 mr-3 text-gray-400" />
+                    <span>{user.phone}</span>
+                  </div>
+                )}
+                {user.department && (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Building2 className="w-4 h-4 mr-3 text-gray-400" />
+                    <span>{user.department}</span>
+                  </div>
+                )}
                 <div className="flex items-center text-sm text-gray-600">
                   <Calendar className="w-4 h-4 mr-3 text-gray-400" />
-                  Joined: {new Date(profile.joinDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  <span>Joined {formatDate(user.createdAt)}</span>
                 </div>
               </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-100 space-y-3">
+              <div className="mt-6 grid grid-cols-2 gap-3">
                 <button
                   onClick={openEditModal}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
                 >
                   <Edit2 className="w-4 h-4 mr-2" />
                   Edit Profile
                 </button>
                 <button
                   onClick={() => setShowPasswordModal(true)}
-                  className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
                 >
                   <Key className="w-4 h-4 mr-2" />
-                  Change Password
+                  Password
                 </button>
               </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Right Column */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="lg:col-span-2 space-y-6"
-        >
+        {/* Statistics & Info */}
+        <div className="lg:col-span-2 space-y-6">
           {/* Statistics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 text-center">
-              <div className="p-2 bg-blue-100 rounded-lg w-fit mx-auto mb-2">
-                <Users className="w-5 h-5 text-blue-600" />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dashboard Overview</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalStudents || 0}</p>
+                <p className="text-sm text-gray-600">Total Students</p>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{statistics.managedUsers.toLocaleString()}</p>
-              <p className="text-xs text-gray-600">Managed Users</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 text-center">
-              <div className="p-2 bg-purple-100 rounded-lg w-fit mx-auto mb-2">
-                <Building2 className="w-5 h-5 text-purple-600" />
+              <div className="p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <Briefcase className="w-5 h-5 text-green-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalFaculty || 0}</p>
+                <p className="text-sm text-gray-600">Total Faculty</p>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{statistics.totalDepartments}</p>
-              <p className="text-xs text-gray-600">Departments</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 text-center">
-              <div className="p-2 bg-amber-100 rounded-lg w-fit mx-auto mb-2">
-                <Clock className="w-5 h-5 text-amber-600" />
+              <div className="p-4 bg-purple-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <Building2 className="w-5 h-5 text-purple-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stats.departments || 0}</p>
+                <p className="text-sm text-gray-600">Departments</p>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{statistics.pendingApprovals}</p>
-              <p className="text-xs text-gray-600">Pending Tasks</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 text-center">
-              <div className="p-2 bg-green-100 rounded-lg w-fit mx-auto mb-2">
-                <Award className="w-5 h-5 text-green-600" />
+              <div className="p-4 bg-orange-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <Clock className="w-5 h-5 text-orange-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stats.pendingApprovals || 0}</p>
+                <p className="text-sm text-gray-600">Pending Approvals</p>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{statistics.activeYears}</p>
-              <p className="text-xs text-gray-600">Years Active</p>
+              <div className="p-4 bg-indigo-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <Award className="w-5 h-5 text-indigo-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stats.feeCollected || 0}</p>
+                <p className="text-sm text-gray-600">Fee Collected (₹L)</p>
+              </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Account Information */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-indigo-600" />
-                Account Information
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-500">Full Name</p>
-                  <p className="font-medium text-gray-900">{profile.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Employee ID</p>
-                  <p className="font-medium text-gray-900">{profile.employeeId}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Email Address</p>
-                  <p className="font-medium text-gray-900">{profile.email}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Phone Number</p>
-                  <p className="font-medium text-gray-900">{profile.phone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Office Location</p>
-                  <p className="font-medium text-gray-900">{profile.office}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Department</p>
-                  <p className="font-medium text-gray-900">{profile.department}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Role</p>
-                  <p className="font-medium text-gray-900">{profile.designation}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Join Date</p>
-                  <p className="font-medium text-gray-900">{new Date(profile.joinDate).toLocaleDateString()}</p>
-                </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">User ID</p>
+                <p className="text-sm font-medium text-gray-900">{user.userId}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Role</p>
+                <p className="text-sm font-medium text-gray-900">{user.role}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Email</p>
+                <p className="text-sm font-medium text-gray-900">{user.email}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Status</p>
+                <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Active
+                </span>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Member Since</p>
+                <p className="text-sm font-medium text-gray-900">{formatDate(user.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Last Updated</p>
+                <p className="text-sm font-medium text-gray-900">{formatDate(user.updatedAt)}</p>
               </div>
             </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-indigo-600" />
-                Recent Activity
-              </h2>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="p-4 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                      <p className="text-sm text-gray-600">{activity.target}</p>
-                    </div>
-                    <span className="text-xs text-gray-500">{activity.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
 
       {/* Edit Profile Modal */}
@@ -311,7 +357,7 @@ const AdminProfile = () => {
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-xl shadow-xl w-full max-w-md"
             >
               <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-t-xl">
                 <div className="flex items-center justify-between">
@@ -322,64 +368,34 @@ const AdminProfile = () => {
                 </div>
               </div>
               <form onSubmit={handleEditProfile} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.name}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      required
-                      value={editForm.email}
-                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                    <input
-                      type="tel"
-                      required
-                      value={editForm.phone}
-                      onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Office Location</label>
-                    <input
-                      type="text"
-                      value={editForm.office}
-                      onChange={(e) => setEditForm({ ...editForm, office: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
-                    <input
-                      type="text"
-                      value={editForm.designation}
-                      onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                    <input
-                      type="text"
-                      value={editForm.department}
-                      onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
                 </div>
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
@@ -418,12 +434,9 @@ const AdminProfile = () => {
               exit={{ scale: 0.95 }}
               className="bg-white rounded-xl shadow-xl w-full max-w-md"
             >
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-t-xl">
+              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-xl">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold flex items-center">
-                    <Key className="w-5 h-5 mr-2" />
-                    Change Password
-                  </h2>
+                  <h2 className="text-xl font-semibold">Change Password</h2>
                   <button onClick={() => setShowPasswordModal(false)} className="text-white/80 hover:text-white">
                     <X className="w-5 h-5" />
                   </button>
@@ -431,33 +444,15 @@ const AdminProfile = () => {
               </div>
               <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Current Password *</label>
-                  <div className="relative">
-                    <input
-                      type={showCurrentPassword ? 'text' : 'password'}
-                      required
-                      value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                   <div className="relative">
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       required
                       value={passwordForm.newPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-10"
+                      placeholder="Min. 8 characters"
                     />
                     <button
                       type="button"
@@ -467,17 +462,17 @@ const AdminProfile = () => {
                       {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
                       value={passwordForm.confirmPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-10"
+                      placeholder="Re-enter password"
                     />
                     <button
                       type="button"
@@ -498,9 +493,10 @@ const AdminProfile = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
                   >
-                    Update Password
+                    <Key className="w-4 h-4 mr-2" />
+                    Change Password
                   </button>
                 </div>
               </form>

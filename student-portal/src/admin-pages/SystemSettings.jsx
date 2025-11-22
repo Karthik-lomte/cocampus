@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Settings,
@@ -16,82 +16,176 @@ import {
   Key,
   AlertTriangle,
   CheckCircle,
-  Globe
+  Globe,
+  Users,
+  BookOpen,
+  RefreshCw,
+  Database,
+  Activity
 } from 'lucide-react';
+import adminService from '../services/adminService';
 
 const SystemSettings = () => {
-  const [activeSection, setActiveSection] = useState('institution');
+  const [activeSection, setActiveSection] = useState('system');
   const [saveStatus, setSaveStatus] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Institution Profile Settings
-  const [institutionSettings, setInstitutionSettings] = useState({
-    name: 'ABC University of Technology',
-    shortName: 'ABCUT',
-    logo: '/logo.png',
-    address: '123 University Road, Tech Park, City - 500001',
-    email: 'info@abcut.edu.in',
-    phone: '+91 40 1234 5678',
-    website: 'www.abcut.edu.in',
-    establishedYear: '1995',
-    affiliatedTo: 'State University',
-    accreditation: 'NAAC A++'
+  // System stats from backend
+  const [systemStats, setSystemStats] = useState({
+    users: [],
+    departments: [],
+    subjects: [],
+    notices: []
   });
 
-  // Academic Settings
-  const [academicSettings, setAcademicSettings] = useState({
-    gradingSystem: '10-point',
-    passingGrade: 'D',
-    minimumAttendance: 75,
-    semesterDuration: 6,
-    maxBacklogs: 8,
-    graceMarks: 5,
-    internalExternal: '40-60',
-    revaluationAllowed: true,
-    supplementaryExam: true
+  // Institution Profile Settings (localStorage)
+  const [institutionSettings, setInstitutionSettings] = useState(() => {
+    const saved = localStorage.getItem('institutionSettings');
+    return saved ? JSON.parse(saved) : {
+      name: 'ABC University of Technology',
+      shortName: 'ABCUT',
+      logo: '/logo.png',
+      address: '123 University Road, Tech Park, City - 500001',
+      email: 'info@abcut.edu.in',
+      phone: '+91 40 1234 5678',
+      website: 'www.abcut.edu.in',
+      establishedYear: '1995',
+      affiliatedTo: 'State University',
+      accreditation: 'NAAC A++'
+    };
   });
 
-  // Notification Settings
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    smsNotifications: false,
-    pushNotifications: true,
-    feeReminders: true,
-    attendanceAlerts: true,
-    examSchedule: true,
-    resultPublished: true,
-    eventAnnouncements: true,
-    placementUpdates: true
+  // Academic Settings (localStorage)
+  const [academicSettings, setAcademicSettings] = useState(() => {
+    const saved = localStorage.getItem('academicSettings');
+    return saved ? JSON.parse(saved) : {
+      gradingSystem: '10-point',
+      passingGrade: 'D',
+      minimumAttendance: 75,
+      semesterDuration: 6,
+      maxBacklogs: 8,
+      graceMarks: 5,
+      internalExternal: '40-60',
+      revaluationAllowed: true,
+      supplementaryExam: true
+    };
   });
 
-  // Security Settings
-  const [securitySettings, setSecuritySettings] = useState({
-    sessionTimeout: 30,
-    passwordMinLength: 8,
-    requireSpecialChar: true,
-    requireNumber: true,
-    requireUppercase: true,
-    passwordExpiry: 90,
-    maxLoginAttempts: 5,
-    twoFactorAuth: false,
-    ipWhitelist: false
+  // Notification Settings (localStorage)
+  const [notificationSettings, setNotificationSettings] = useState(() => {
+    const saved = localStorage.getItem('notificationSettings');
+    return saved ? JSON.parse(saved) : {
+      emailNotifications: true,
+      smsNotifications: false,
+      pushNotifications: true,
+      feeReminders: true,
+      attendanceAlerts: true,
+      examSchedule: true,
+      resultPublished: true,
+      eventAnnouncements: true,
+      placementUpdates: true
+    };
+  });
+
+  // Security Settings (localStorage)
+  const [securitySettings, setSecuritySettings] = useState(() => {
+    const saved = localStorage.getItem('securitySettings');
+    return saved ? JSON.parse(saved) : {
+      sessionTimeout: 30,
+      passwordMinLength: 8,
+      requireSpecialChar: true,
+      requireNumber: true,
+      requireUppercase: true,
+      passwordExpiry: 90,
+      maxLoginAttempts: 5,
+      twoFactorAuth: false,
+      ipWhitelist: false
+    };
   });
 
   const sections = [
+    { id: 'system', label: 'System Information', icon: Database },
     { id: 'institution', label: 'Institution Profile', icon: Building2 },
     { id: 'academic', label: 'Academic Settings', icon: GraduationCap },
     { id: 'notifications', label: 'Notification Settings', icon: Bell },
     { id: 'security', label: 'Security Settings', icon: Shield }
   ];
 
-  const handleSave = (section) => {
+  // Fetch system data from backend
+  const fetchSystemData = async () => {
+    try {
+      const isRefresh = !loading;
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const [users, departments, subjects, notices] = await Promise.all([
+        adminService.getUsers(),
+        adminService.getDepartments(),
+        adminService.getSubjects(),
+        adminService.getNotices()
+      ]);
+
+      setSystemStats({
+        users: users.success ? users.data : [],
+        departments: departments.success ? departments.data : [],
+        subjects: subjects.success ? subjects.data : [],
+        notices: notices.success ? notices.data : []
+      });
+    } catch (error) {
+      console.error('Error fetching system data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemData();
+  }, []);
+
+  // Compute stats from data
+  const stats = useMemo(() => {
+    const students = systemStats.users.filter(u => u.role === 'Student');
+    const faculty = systemStats.users.filter(u => u.role === 'Faculty');
+    const admins = systemStats.users.filter(u => u.role === 'Admin');
+
+    return {
+      totalUsers: systemStats.users.length,
+      students: students.length,
+      faculty: faculty.length,
+      admins: admins.length,
+      departments: systemStats.departments.length,
+      subjects: systemStats.subjects.length,
+      notices: systemStats.notices.length,
+      activeUsers: systemStats.users.filter(u => u.status === 'Active').length
+    };
+  }, [systemStats]);
+
+  const handleSave = (section, data, settingsKey) => {
     setSaveStatus('saving');
-    // Simulate save operation
+
+    // Save to localStorage
+    localStorage.setItem(settingsKey, JSON.stringify(data));
+
     setTimeout(() => {
       setSaveStatus('saved');
       alert(`${section} settings saved successfully!`);
       setTimeout(() => setSaveStatus(''), 2000);
-    }, 1000);
+    }, 500);
   };
+
+  const handleRefresh = () => {
+    fetchSystemData();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -101,8 +195,19 @@ const SystemSettings = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-6 text-white"
       >
-        <h1 className="text-3xl font-bold mb-2">System Settings</h1>
-        <p className="text-indigo-100">Configure institution settings and system preferences</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">System Settings</h1>
+            <p className="text-indigo-100">Configure institution settings and system preferences</p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-3 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -149,6 +254,138 @@ const SystemSettings = () => {
           transition={{ delay: 0.2 }}
           className="lg:col-span-3"
         >
+          {/* System Information */}
+          {activeSection === 'system' && (
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Users</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalUsers}</p>
+                    </div>
+                    <div className="p-3 bg-indigo-50 rounded-lg">
+                      <Users className="w-6 h-6 text-indigo-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Active Users</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1">{stats.activeUsers}</p>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <Activity className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Departments</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-1">{stats.departments}</p>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <Building2 className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Subjects</p>
+                      <p className="text-2xl font-bold text-purple-600 mt-1">{stats.subjects}</p>
+                    </div>
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <BookOpen className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Distribution */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+                <div className="p-6 border-b border-gray-100">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                    User Distribution
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Students</span>
+                        <GraduationCap className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <p className="text-3xl font-bold text-blue-600">{stats.students}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {((stats.students / stats.totalUsers) * 100).toFixed(1)}% of total
+                      </p>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Faculty</span>
+                        <Users className="w-5 h-5 text-green-600" />
+                      </div>
+                      <p className="text-3xl font-bold text-green-600">{stats.faculty}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {((stats.faculty / stats.totalUsers) * 100).toFixed(1)}% of total
+                      </p>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Admins</span>
+                        <Shield className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <p className="text-3xl font-bold text-purple-600">{stats.admins}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {((stats.admins / stats.totalUsers) * 100).toFixed(1)}% of total
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Department Details */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+                <div className="p-6 border-b border-gray-100">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-indigo-600" />
+                    Departments Overview
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-3">
+                    {systemStats.departments.slice(0, 5).map((dept) => (
+                      <div key={dept._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-900">{dept.name}</p>
+                          <p className="text-sm text-gray-500">{dept.code}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-semibold">{dept.studentCount || 0}</span> students
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            <span className="font-semibold">{dept.facultyCount || 0}</span> faculty
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Institution Profile */}
           {activeSection === 'institution' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
@@ -269,7 +506,7 @@ const SystemSettings = () => {
                 </div>
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => handleSave('Institution Profile')}
+                    onClick={() => handleSave('Institution Profile', institutionSettings, 'institutionSettings')}
                     className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                   >
                     <Save className="w-4 h-4 mr-2" />
@@ -409,7 +646,7 @@ const SystemSettings = () => {
                 </div>
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => handleSave('Academic Settings')}
+                    onClick={() => handleSave('Academic Settings', academicSettings, 'academicSettings')}
                     className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                   >
                     <Save className="w-4 h-4 mr-2" />
@@ -519,7 +756,7 @@ const SystemSettings = () => {
                 </div>
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => handleSave('Notification Settings')}
+                    onClick={() => handleSave('Notification Settings', notificationSettings, 'notificationSettings')}
                     className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                   >
                     <Save className="w-4 h-4 mr-2" />
@@ -676,7 +913,7 @@ const SystemSettings = () => {
                 </div>
                 <div className="flex justify-end pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => handleSave('Security Settings')}
+                    onClick={() => handleSave('Security Settings', securitySettings, 'securitySettings')}
                     className="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                   >
                     <Save className="w-4 h-4 mr-2" />

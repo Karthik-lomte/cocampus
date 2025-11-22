@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -6,188 +6,181 @@ import {
   Users,
   DollarSign,
   Calendar,
-  Clock,
   Download,
   Filter,
   GraduationCap,
   BookOpen,
   Award,
   PieChart,
-  X
+  X,
+  RefreshCw,
+  FileText,
+  Bell,
+  CheckCircle
 } from 'lucide-react';
+import adminService from '../api/adminService';
 
 const ReportsAnalytics = () => {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    departments: [],
+    users: [],
+    feeStats: {},
+    subjects: [],
+    notices: [],
+    approvals: []
+  });
   const [filters, setFilters] = useState({
     department: 'all',
-    semester: 'all',
     dateFrom: '',
     dateTo: ''
   });
 
-  const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology'];
-  const semesters = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  useEffect(() => {
+    fetchAllData();
+  }, []);
 
-  // Student Performance Data
-  const performanceData = [
-    { department: 'Computer Science', passed: 92, failed: 8, avgScore: 78, topScore: 98 },
-    { department: 'Electronics', passed: 88, failed: 12, avgScore: 74, topScore: 95 },
-    { department: 'Mechanical', passed: 85, failed: 15, avgScore: 72, topScore: 94 },
-    { department: 'Civil', passed: 87, failed: 13, avgScore: 73, topScore: 92 },
-    { department: 'Information Technology', passed: 90, failed: 10, avgScore: 76, topScore: 96 }
-  ];
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      const [depts, users, feeStats, subjects, notices, approvals] = await Promise.all([
+        adminService.getDepartments(),
+        adminService.getUsers(),
+        adminService.getFeeStats(),
+        adminService.getSubjects(),
+        adminService.getNotices(),
+        adminService.getApprovals()
+      ]);
 
-  // Fee Collection Data
-  const feeData = {
-    totalExpected: 28500000,
-    totalCollected: 24850000,
-    pending: 3650000,
-    collectionRate: 87,
-    departmentWise: [
-      { department: 'Computer Science', collected: 6200000, pending: 800000 },
-      { department: 'Electronics', collected: 4800000, pending: 700000 },
-      { department: 'Mechanical', collected: 4500000, pending: 650000 },
-      { department: 'Civil', collected: 4350000, pending: 750000 },
-      { department: 'Information Technology', collected: 5000000, pending: 750000 }
-    ]
+      setData({
+        departments: depts.success ? depts.data : [],
+        users: users.success ? users.data : [],
+        feeStats: feeStats.success ? feeStats.data : {},
+        subjects: subjects.success ? subjects.data : [],
+        notices: notices.success ? notices.data : [],
+        approvals: approvals.success ? approvals.data : []
+      });
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+      alert('Error loading analytics. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Attendance Data
-  const attendanceData = [
-    { department: 'Computer Science', overall: 85, theory: 88, practical: 82 },
-    { department: 'Electronics', overall: 82, theory: 85, practical: 79 },
-    { department: 'Mechanical', overall: 78, theory: 80, practical: 76 },
-    { department: 'Civil', overall: 80, theory: 83, practical: 77 },
-    { department: 'Information Technology', overall: 84, theory: 86, practical: 82 }
-  ];
-
-  // Faculty Workload Data
-  const facultyWorkload = [
-    { department: 'Computer Science', faculty: 45, avgHours: 18, totalClasses: 320, avgStudents: 42 },
-    { department: 'Electronics', faculty: 32, avgHours: 20, totalClasses: 256, avgStudents: 38 },
-    { department: 'Mechanical', faculty: 30, avgHours: 19, totalClasses: 240, avgStudents: 40 },
-    { department: 'Civil', faculty: 25, avgHours: 21, totalClasses: 200, avgStudents: 36 },
-    { department: 'Information Technology', faculty: 28, avgHours: 19, totalClasses: 224, avgStudents: 41 }
-  ];
-
-  // Check if any filter is active
-  const isFiltered = useMemo(() => {
-    return filters.department !== 'all' ||
-           filters.semester !== 'all' ||
-           filters.dateFrom !== '' ||
-           filters.dateTo !== '';
-  }, [filters]);
-
-  // Count active filters
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (filters.department !== 'all') count++;
-    if (filters.semester !== 'all') count++;
-    if (filters.dateFrom !== '') count++;
-    if (filters.dateTo !== '') count++;
-    return count;
-  }, [filters]);
-
-  // Filtered Performance Data
-  const filteredPerformanceData = useMemo(() => {
-    if (filters.department === 'all') {
-      return performanceData;
-    }
-    return performanceData.filter(item => item.department === filters.department);
-  }, [filters.department, performanceData]);
-
-  // Filtered Fee Data (department wise)
-  const filteredFeeDataDeptWise = useMemo(() => {
-    if (filters.department === 'all') {
-      return feeData.departmentWise;
-    }
-    return feeData.departmentWise.filter(item => item.department === filters.department);
-  }, [filters.department, feeData.departmentWise]);
-
-  // Filtered Attendance Data
-  const filteredAttendanceData = useMemo(() => {
-    if (filters.department === 'all') {
-      return attendanceData;
-    }
-    return attendanceData.filter(item => item.department === filters.department);
-  }, [filters.department, attendanceData]);
-
-  // Filtered Faculty Workload Data
-  const filteredFacultyWorkload = useMemo(() => {
-    if (filters.department === 'all') {
-      return facultyWorkload;
-    }
-    return facultyWorkload.filter(item => item.department === filters.department);
-  }, [filters.department, facultyWorkload]);
-
-  // Calculate summary stats based on filtered data
-  const summaryStats = useMemo(() => {
-    // Pass Rate
-    const totalPassed = filteredPerformanceData.reduce((sum, item) => sum + item.passed, 0);
-    const avgPassRate = filteredPerformanceData.length > 0
-      ? (totalPassed / filteredPerformanceData.length).toFixed(1)
-      : 0;
-
-    // Fee Collection
-    const totalCollected = filteredFeeDataDeptWise.reduce((sum, item) => sum + item.collected, 0);
-    const totalPending = filteredFeeDataDeptWise.reduce((sum, item) => sum + item.pending, 0);
-    const collectionRate = totalCollected + totalPending > 0
-      ? Math.round((totalCollected / (totalCollected + totalPending)) * 100)
-      : 0;
-
-    // Attendance
-    const totalAttendance = filteredAttendanceData.reduce((sum, item) => sum + item.overall, 0);
-    const avgAttendance = filteredAttendanceData.length > 0
-      ? (totalAttendance / filteredAttendanceData.length).toFixed(1)
-      : 0;
-
-    // Faculty
-    const totalFaculty = filteredFacultyWorkload.reduce((sum, item) => sum + item.faculty, 0);
-    const totalHours = filteredFacultyWorkload.reduce((sum, item) => sum + item.avgHours * item.faculty, 0);
-    const avgHoursWeek = totalFaculty > 0
-      ? (totalHours / totalFaculty).toFixed(1)
-      : 0;
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const students = data.users.filter(u => u.role === 'Student');
+    const faculty = data.users.filter(u => u.role === 'Faculty');
 
     return {
-      passRate: avgPassRate,
-      collectionRate,
-      totalCollected,
-      avgAttendance,
-      totalFaculty,
-      avgHoursWeek
+      totalStudents: students.length,
+      totalFaculty: faculty.length,
+      totalDepartments: data.departments.length,
+      totalSubjects: data.subjects.length,
+      totalNotices: data.notices.length,
+      activeNotices: data.notices.filter(n => n.isPinned).length,
+      pendingApprovals: data.approvals.filter(a => a.status === 'Pending').length,
+      feeCollected: data.feeStats.totalCollected || 0,
+      feePending: data.feeStats.totalPending || 0
     };
-  }, [filteredPerformanceData, filteredFeeDataDeptWise, filteredAttendanceData, filteredFacultyWorkload]);
+  }, [data]);
 
-  // Filtered fee summary data
-  const filteredFeeSummary = useMemo(() => {
-    const totalCollected = filteredFeeDataDeptWise.reduce((sum, item) => sum + item.collected, 0);
-    const totalPending = filteredFeeDataDeptWise.reduce((sum, item) => sum + item.pending, 0);
-    const collectionRate = totalCollected + totalPending > 0
-      ? Math.round((totalCollected / (totalCollected + totalPending)) * 100)
-      : 0;
+  // Department-wise statistics
+  const departmentStats = useMemo(() => {
+    return data.departments.map(dept => {
+      const deptSubjects = data.subjects.filter(s => s.department === dept.name);
+      const theorySubjects = deptSubjects.filter(s => s.type === 'Theory').length;
+      const labSubjects = deptSubjects.filter(s => s.type === 'Lab').length;
 
-    return {
-      totalCollected,
-      pending: totalPending,
-      collectionRate
-    };
-  }, [filteredFeeDataDeptWise]);
+      return {
+        name: dept.name,
+        code: dept.code,
+        students: dept.studentCount || 0,
+        faculty: dept.facultyCount || 0,
+        subjects: deptSubjects.length,
+        theory: theorySubjects,
+        lab: labSubjects,
+        performance: dept.performance || 0
+      };
+    });
+  }, [data.departments, data.subjects]);
 
-  const handleExport = (reportType) => {
-    alert(`Exporting ${reportType} report as PDF...`);
-  };
+  // Subject type distribution
+  const subjectDistribution = useMemo(() => {
+    const theory = data.subjects.filter(s => s.type === 'Theory').length;
+    const lab = data.subjects.filter(s => s.type === 'Lab').length;
+    const elective = data.subjects.filter(s => s.type === 'Elective').length;
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
+    return { theory, lab, elective };
+  }, [data.subjects]);
+
+  // Approval statistics
+  const approvalStats = useMemo(() => {
+    const byStatus = data.approvals.reduce((acc, approval) => {
+      acc[approval.status] = (acc[approval.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byType = data.approvals.reduce((acc, approval) => {
+      acc[approval.type] = (acc[approval.type] || 0) + 1;
+      return acc;
+    }, {});
+
+    return { byStatus, byType };
+  }, [data.approvals]);
+
+  // Notice statistics
+  const noticeStats = useMemo(() => {
+    const byCategory = data.notices.reduce((acc, notice) => {
+      acc[notice.category] = (acc[notice.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byPriority = data.notices.reduce((acc, notice) => {
+      acc[notice.priority] = (acc[notice.priority] || 0) + 1;
+      return acc;
+    }, {});
+
+    return { byCategory, byPriority };
+  }, [data.notices]);
+
+  // Filtered department stats
+  const filteredDepartmentStats = useMemo(() => {
+    if (filters.department === 'all') return departmentStats;
+    return departmentStats.filter(d => d.name === filters.department);
+  }, [departmentStats, filters.department]);
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(amount || 0);
   };
 
   const clearFilters = () => {
-    setFilters({
-      department: 'all',
-      semester: 'all',
-      dateFrom: '',
-      dateTo: ''
-    });
+    setFilters({ department: 'all', dateFrom: '', dateTo: '' });
   };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.department !== 'all') count++;
+    if (filters.dateFrom) count++;
+    if (filters.dateTo) count++;
+    return count;
+  }, [filters]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -197,506 +190,340 @@ const ReportsAnalytics = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-6 text-white"
       >
-        <h1 className="text-3xl font-bold mb-2">Reports & Analytics</h1>
-        <p className="text-indigo-100">Comprehensive insights and data analysis for institution management</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Reports & Analytics</h1>
+            <p className="text-indigo-100">Comprehensive insights and data visualization</p>
+          </div>
+          <button
+            onClick={fetchAllData}
+            className="flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-5 h-5 mr-2" />
+            Refresh
+          </button>
+        </div>
       </motion.div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Overall Pass Rate</p>
-              <p className="text-3xl font-bold text-gray-900">{summaryStats.passRate}%</p>
-              <p className="text-xs text-green-600 mt-1">
-                {isFiltered ? `${filteredPerformanceData.length} dept(s)` : '+2.3% from last sem'}
-              </p>
-            </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <Award className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Fee Collection</p>
-              <p className="text-3xl font-bold text-gray-900">{summaryStats.collectionRate}%</p>
-              <p className="text-xs text-blue-600 mt-1">
-                Rs. {(summaryStats.totalCollected / 10000000).toFixed(2)} Cr collected
-              </p>
-            </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <DollarSign className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Avg Attendance</p>
-              <p className="text-3xl font-bold text-gray-900">{summaryStats.avgAttendance}%</p>
-              <p className="text-xs text-purple-600 mt-1">
-                {isFiltered ? `${filteredAttendanceData.length} dept(s)` : 'Across all depts'}
-              </p>
-            </div>
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Users className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Faculty</p>
-              <p className="text-3xl font-bold text-gray-900">{summaryStats.totalFaculty}</p>
-              <p className="text-xs text-amber-600 mt-1">{summaryStats.avgHoursWeek} avg hrs/week</p>
-            </div>
-            <div className="p-3 bg-amber-100 rounded-lg">
-              <GraduationCap className="w-6 h-6 text-amber-600" />
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
       {/* Filters */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className={`bg-white rounded-xl shadow-sm p-4 border ${isFiltered ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-100'}`}
-      >
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
         <div className="flex flex-col md:flex-row gap-4 items-center">
-          <div className="flex items-center gap-2 text-gray-600">
-            <Filter className="w-5 h-5" />
-            <span className="font-medium">Filters:</span>
-            {isFiltered && (
-              <span className="bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full">
-                {activeFilterCount} active
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-gray-400" />
+            <span className="text-sm font-medium text-gray-700">Filters:</span>
           </div>
           <select
             value={filters.department}
-            onChange={(e) => handleFilterChange('department', e.target.value)}
-            className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-              filters.department !== 'all' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'
-            }`}
+            onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
             <option value="all">All Departments</option>
-            {departments.map(dept => (
-              <option key={dept} value={dept}>{dept}</option>
-            ))}
-          </select>
-          <select
-            value={filters.semester}
-            onChange={(e) => handleFilterChange('semester', e.target.value)}
-            className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-              filters.semester !== 'all' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'
-            }`}
-          >
-            <option value="all">All Semesters</option>
-            {semesters.map(sem => (
-              <option key={sem} value={sem}>Semester {sem}</option>
+            {data.departments.map(dept => (
+              <option key={dept._id} value={dept.name}>{dept.name}</option>
             ))}
           </select>
           <input
             type="date"
             value={filters.dateFrom}
-            onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-            className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-              filters.dateFrom !== '' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'
-            }`}
+            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             placeholder="From Date"
           />
           <input
             type="date"
             value={filters.dateTo}
-            onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-            className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-              filters.dateTo !== '' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'
-            }`}
+            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             placeholder="To Date"
           />
-          {isFiltered && (
+          {activeFilterCount > 0 && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-1 px-4 py-2 text-sm text-red-600 hover:bg-red-50 border border-red-300 rounded-lg transition-colors"
+              className="flex items-center px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <X className="w-4 h-4" />
-              Clear Filters
+              <X className="w-4 h-4 mr-1" />
+              Clear ({activeFilterCount})
             </button>
           )}
         </div>
-        {isFiltered && (
-          <div className="mt-3 pt-3 border-t border-indigo-200">
-            <p className="text-sm text-indigo-600 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></span>
-              Showing filtered results
-              {filters.department !== 'all' && ` for ${filters.department}`}
-            </p>
-          </div>
-        )}
-      </motion.div>
+      </div>
 
-      {/* Student Performance Report */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100"
-      >
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-indigo-600" />
-              Student Performance Report
-              {isFiltered && (
-                <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">
-                  {filteredPerformanceData.length} result(s)
-                </span>
-              )}
-            </h2>
-            <button
-              onClick={() => handleExport('Student Performance')}
-              className="flex items-center px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export
-            </button>
-          </div>
-        </div>
-        <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pass %</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Fail %</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Score</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Top Score</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Performance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredPerformanceData.length > 0 ? (
-                  filteredPerformanceData.map((row, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 font-medium text-gray-900">{row.department}</td>
-                      <td className="px-4 py-4 text-center text-green-600 font-medium">{row.passed}%</td>
-                      <td className="px-4 py-4 text-center text-red-600">{row.failed}%</td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.avgScore}</td>
-                      <td className="px-4 py-4 text-center text-indigo-600 font-medium">{row.topScore}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[120px]">
-                            <div
-                              className={`h-2 rounded-full ${
-                                row.passed >= 90 ? 'bg-green-500' :
-                                row.passed >= 80 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${row.passed}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                      No data found for the selected filters
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </motion.div>
+      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          icon={Users}
+          title="Total Students"
+          value={stats.totalStudents}
+          subtitle="Enrolled"
+          color="blue"
+        />
+        <StatCard
+          icon={GraduationCap}
+          title="Total Faculty"
+          value={stats.totalFaculty}
+          subtitle="Teaching staff"
+          color="green"
+        />
+        <StatCard
+          icon={BookOpen}
+          title="Total Subjects"
+          value={stats.totalSubjects}
+          subtitle="Across departments"
+          color="purple"
+        />
+        <StatCard
+          icon={Building2}
+          title="Departments"
+          value={stats.totalDepartments}
+          subtitle="Active"
+          color="orange"
+        />
+      </div>
 
-      {/* Fee Collection Report */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100"
-      >
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-indigo-600" />
-              Fee Collection Report
-              {isFiltered && (
-                <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">
-                  {filteredFeeDataDeptWise.length} result(s)
-                </span>
-              )}
-            </h2>
-            <button
-              onClick={() => handleExport('Fee Collection')}
-              className="flex items-center px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export
-            </button>
+      {/* Financial Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Fee Collection</h3>
+            <DollarSign className="w-6 h-6 text-green-600" />
           </div>
-        </div>
-        <div className="p-6">
-          {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-green-50 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-600">Total Collected</p>
-              <p className="text-xl font-bold text-green-600">Rs. {(filteredFeeSummary.totalCollected / 10000000).toFixed(2)} Cr</p>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Collected</span>
+                <span className="font-semibold text-green-600">{formatCurrency(stats.feeCollected)}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-green-600 h-2 rounded-full"
+                  style={{
+                    width: `${stats.feeCollected / (stats.feeCollected + stats.feePending) * 100}%`
+                  }}
+                />
+              </div>
             </div>
-            <div className="bg-red-50 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-600">Pending Amount</p>
-              <p className="text-xl font-bold text-red-600">Rs. {(filteredFeeSummary.pending / 100000).toFixed(2)} L</p>
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Pending</span>
+                <span className="font-semibold text-red-600">{formatCurrency(stats.feePending)}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-red-600 h-2 rounded-full"
+                  style={{
+                    width: `${stats.feePending / (stats.feeCollected + stats.feePending) * 100}%`
+                  }}
+                />
+              </div>
             </div>
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-600">Collection Rate</p>
-              <p className="text-xl font-bold text-blue-600">{filteredFeeSummary.collectionRate}%</p>
+            <div className="pt-2 border-t">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Collection Rate</span>
+                <span className="text-sm font-semibold text-indigo-600">
+                  {((stats.feeCollected / (stats.feeCollected + stats.feePending)) * 100).toFixed(1)}%
+                </span>
+              </div>
             </div>
           </div>
+        </motion.div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Collected</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pending</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredFeeDataDeptWise.length > 0 ? (
-                  filteredFeeDataDeptWise.map((row, index) => {
-                    const total = row.collected + row.pending;
-                    const percentage = Math.round((row.collected / total) * 100);
-                    return (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 font-medium text-gray-900">{row.department}</td>
-                        <td className="px-4 py-4 text-right text-green-600">Rs. {(row.collected / 100000).toFixed(1)}L</td>
-                        <td className="px-4 py-4 text-right text-red-600">Rs. {(row.pending / 100000).toFixed(1)}L</td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[120px]">
-                              <div
-                                className="h-2 rounded-full bg-indigo-500"
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-gray-600">{percentage}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="px-4 py-8 text-center text-gray-500">
-                      No data found for the selected filters
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Approvals Status</h3>
+            <CheckCircle className="w-6 h-6 text-blue-600" />
           </div>
-        </div>
-      </motion.div>
+          <div className="space-y-3">
+            {Object.entries(approvalStats.byStatus).map(([status, count]) => (
+              <div key={status} className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">{status}</span>
+                <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
+                  {count}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="pt-4 mt-4 border-t">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{data.approvals.length}</p>
+              <p className="text-sm text-gray-600">Total Requests</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
 
-      {/* Attendance Report */}
+      {/* Department Performance */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
         className="bg-white rounded-xl shadow-sm border border-gray-100"
       >
         <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-indigo-600" />
-              Attendance Report
-              {isFiltered && (
-                <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">
-                  {filteredAttendanceData.length} result(s)
-                </span>
-              )}
-            </h2>
-            <button
-              onClick={() => handleExport('Attendance')}
-              className="flex items-center px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export
-            </button>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Department Overview</h3>
         </div>
-        <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Overall %</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Theory %</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Practical %</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredAttendanceData.length > 0 ? (
-                  filteredAttendanceData.map((row, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 font-medium text-gray-900">{row.department}</td>
-                      <td className="px-4 py-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-sm font-medium ${
-                          row.overall >= 85 ? 'bg-green-100 text-green-700' :
-                          row.overall >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {row.overall}%
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.theory}%</td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.practical}%</td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                            <div
-                              className={`h-2 rounded-full ${
-                                row.overall >= 85 ? 'bg-green-500' :
-                                row.overall >= 75 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${row.overall}%` }}
-                            />
-                          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Students</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Faculty</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Subjects</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Theory</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Lab</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Performance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredDepartmentStats.map((dept) => (
+                <tr key={dept.code} className="hover:bg-gray-50">
+                  <td className="px-6 py-4">
+                    <div>
+                      <p className="font-medium text-gray-900">{dept.name}</p>
+                      <p className="text-sm text-gray-500">{dept.code}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center text-sm text-gray-900">{dept.students}</td>
+                  <td className="px-6 py-4 text-center text-sm text-gray-900">{dept.faculty}</td>
+                  <td className="px-6 py-4 text-center text-sm font-medium text-indigo-600">{dept.subjects}</td>
+                  <td className="px-6 py-4 text-center text-sm text-gray-900">{dept.theory}</td>
+                  <td className="px-6 py-4 text-center text-sm text-gray-900">{dept.lab}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-center">
+                      <div className="w-24">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-gray-600">{dept.performance}%</span>
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
-                      No data found for the selected filters
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-green-600 h-2 rounded-full"
+                            style={{ width: `${dept.performance}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </motion.div>
 
-      {/* Faculty Workload Report */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.9 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100"
-      >
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-indigo-600" />
-              Faculty Workload Report
-              {isFiltered && (
-                <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">
-                  {filteredFacultyWorkload.length} result(s)
+      {/* Subject & Notice Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Subject Distribution</h3>
+            <PieChart className="w-6 h-6 text-indigo-600" />
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-blue-600 rounded mr-2"></div>
+                <span className="text-sm text-gray-600">Theory</span>
+              </div>
+              <span className="text-sm font-semibold">{subjectDistribution.theory}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-600 rounded mr-2"></div>
+                <span className="text-sm text-gray-600">Lab</span>
+              </div>
+              <span className="text-sm font-semibold">{subjectDistribution.lab}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-purple-600 rounded mr-2"></div>
+                <span className="text-sm text-gray-600">Elective</span>
+              </div>
+              <span className="text-sm font-semibold">{subjectDistribution.elective}</span>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Notice Categories</h3>
+            <Bell className="w-6 h-6 text-orange-600" />
+          </div>
+          <div className="space-y-3">
+            {Object.entries(noticeStats.byCategory).map(([category, count]) => (
+              <div key={category} className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">{category}</span>
+                <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
+                  {count}
                 </span>
-              )}
-            </h2>
-            <button
-              onClick={() => handleExport('Faculty Workload')}
-              className="flex items-center px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export
-            </button>
+              </div>
+            ))}
           </div>
-        </div>
-        <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Faculty Count</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Hours/Week</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Classes</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Students</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workload</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredFacultyWorkload.length > 0 ? (
-                  filteredFacultyWorkload.map((row, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 font-medium text-gray-900">{row.department}</td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.faculty}</td>
-                      <td className="px-4 py-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-sm font-medium ${
-                          row.avgHours <= 18 ? 'bg-green-100 text-green-700' :
-                          row.avgHours <= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {row.avgHours}h
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.totalClasses}</td>
-                      <td className="px-4 py-4 text-center text-gray-600">{row.avgStudents}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                            <div
-                              className={`h-2 rounded-full ${
-                                row.avgHours <= 18 ? 'bg-green-500' :
-                                row.avgHours <= 20 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${(row.avgHours / 24) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                      No data found for the selected filters
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="pt-4 mt-4 border-t">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Pinned Notices</span>
+              <span className="font-semibold text-indigo-600">{stats.activeNotices}</span>
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
+
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <button className="flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+          <Download className="w-5 h-5 mr-2" />
+          Export Report (PDF)
+        </button>
+      </div>
     </div>
   );
 };
+
+const StatCard = ({ icon: Icon, title, value, subtitle, color }) => {
+  const colorClasses = {
+    blue: 'bg-blue-100 text-blue-600',
+    green: 'bg-green-100 text-green-600',
+    purple: 'bg-purple-100 text-purple-600',
+    orange: 'bg-orange-100 text-orange-600'
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600 mb-1">{title}</p>
+          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+        </div>
+        <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+          <Icon className="w-6 h-6" />
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const Building2 = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+  </svg>
+);
 
 export default ReportsAnalytics;
