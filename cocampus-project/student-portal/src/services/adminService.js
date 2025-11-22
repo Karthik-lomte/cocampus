@@ -161,6 +161,31 @@ export const adminService = {
     return response.data.data;
   },
 
+  updateFacility: async (id, data) => {
+    const response = await api.put(`/admin/sports/facilities/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteFacility: async (id) => {
+    const response = await api.delete(`/admin/sports/facilities/${id}`);
+    return response.data.data;
+  },
+
+  getSportsBookings: async (params = {}) => {
+    const response = await api.get('/admin/sports/bookings', { params });
+    return response.data.data;
+  },
+
+  approveBooking: async (id) => {
+    const response = await api.post(`/admin/sports/bookings/${id}/approve`);
+    return response.data.data;
+  },
+
+  rejectBooking: async (id, reason) => {
+    const response = await api.post(`/admin/sports/bookings/${id}/reject`, { reason });
+    return response.data.data;
+  },
+
   // Approval Management
   getPendingApprovals: async () => {
     const response = await api.get('/admin/approvals/pending');
