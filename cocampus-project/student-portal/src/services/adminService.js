@@ -172,5 +172,21 @@ export const adminService = {
   updateSettings: async (data) => {
     const response = await api.put('/admin/settings', data);
     return response.data.data;
+  },
+
+  // Profile Management
+  getProfile: async () => {
+    const response = await api.get('/admin/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (data) => {
+    const response = await api.put('/admin/profile', data);
+    return response.data.data;
+  },
+
+  changePassword: async (data) => {
+    const response = await api.put('/admin/change-password', data);
+    return response.data.data;
   }
 };
