@@ -130,6 +130,26 @@ export const adminService = {
     return response.data.data;
   },
 
+  updateHostelBlock: async (id, data) => {
+    const response = await api.put(`/admin/hostel/blocks/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteHostelBlock: async (id) => {
+    const response = await api.delete(`/admin/hostel/blocks/${id}`);
+    return response.data.data;
+  },
+
+  getWardens: async () => {
+    const response = await api.get('/admin/hostel/wardens');
+    return response.data.data;
+  },
+
+  assignWarden: async (blockId, wardenId) => {
+    const response = await api.post(`/admin/hostel/blocks/${blockId}/assign-warden`, { wardenId });
+    return response.data.data;
+  },
+
   // Sports Management
   getSportsFacilities: async () => {
     const response = await api.get('/admin/sports/facilities');

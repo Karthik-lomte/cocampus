@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
@@ -14,24 +14,22 @@ import {
   Phone,
   Mail
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const HostelManagement = () => {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   // Blocks State
-  const [blocks, setBlocks] = useState([
-    { id: 1, name: 'Block A - Boys', type: 'boys', floors: 4, roomsPerFloor: 20, totalRooms: 80, warden: 'Mr. Vikram Singh', wardenId: 1 },
-    { id: 2, name: 'Block B - Boys', type: 'boys', floors: 3, roomsPerFloor: 15, totalRooms: 45, warden: 'Mr. Rajesh Kumar', wardenId: 2 },
-    { id: 3, name: 'Block C - Girls', type: 'girls', floors: 4, roomsPerFloor: 25, totalRooms: 100, warden: 'Mrs. Sunita Devi', wardenId: 3 },
-    { id: 4, name: 'Block D - Girls', type: 'girls', floors: 3, roomsPerFloor: 18, totalRooms: 54, warden: 'Mrs. Priya Sharma', wardenId: 4 }
-  ]);
+  const [blocks, setBlocks] = useState([]);
 
   // Wardens State
-  const [wardens, setWardens] = useState([
-    { id: 1, name: 'Mr. Vikram Singh', email: 'vikram@university.edu', phone: '+91 9876543214', assignedBlock: 'Block A - Boys' },
-    { id: 2, name: 'Mr. Rajesh Kumar', email: 'rajesh@university.edu', phone: '+91 9876543215', assignedBlock: 'Block B - Boys' },
-    { id: 3, name: 'Mrs. Sunita Devi', email: 'sunita@university.edu', phone: '+91 9876543216', assignedBlock: 'Block C - Girls' },
-    { id: 4, name: 'Mrs. Priya Sharma', email: 'priya@university.edu', phone: '+91 9876543217', assignedBlock: 'Block D - Girls' },
-    { id: 5, name: 'Mr. Anil Verma', email: 'anil@university.edu', phone: '+91 9876543218', assignedBlock: 'Unassigned' }
-  ]);
+  const [wardens, setWardens] = useState([]);
 
   // UI State
   const [activeView, setActiveView] = useState('blocks');
@@ -49,38 +47,59 @@ const HostelManagement = () => {
     wardenId: '', blockId: ''
   });
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [blocksData, wardensData] = await Promise.all([
+        adminService.getHostelBlocks(),
+        adminService.getWardens()
+      ]);
+      setBlocks(blocksData.blocks || blocksData || []);
+      setWardens(wardensData.wardens || wardensData || []);
+    } catch (err) {
+      console.error('Hostel management error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Calculate Stats
-  const totalRooms = blocks.reduce((sum, block) => sum + block.totalRooms, 0);
+  const totalRooms = blocks.reduce((sum, block) => sum + (block.totalRooms || 0), 0);
 
   // Block Functions
-  const handleAddBlock = (e) => {
+  const handleAddBlock = async (e) => {
     e.preventDefault();
-    const totalRooms = parseInt(blockForm.floors) * parseInt(blockForm.roomsPerFloor);
-    if (editingBlock) {
-      setBlocks(blocks.map(b => b.id === editingBlock.id ? {
-        ...b,
-        ...blockForm,
-        totalRooms,
+    try {
+      setSubmitting(true);
+      const blockData = {
+        name: blockForm.name,
+        type: blockForm.type,
         floors: parseInt(blockForm.floors),
         roomsPerFloor: parseInt(blockForm.roomsPerFloor)
-      } : b));
-      alert('Block updated successfully!');
-    } else {
-      const newBlock = {
-        id: blocks.length + 1,
-        ...blockForm,
-        totalRooms,
-        floors: parseInt(blockForm.floors),
-        roomsPerFloor: parseInt(blockForm.roomsPerFloor),
-        warden: 'Unassigned',
-        wardenId: null
       };
-      setBlocks([...blocks, newBlock]);
-      alert('Block added successfully!');
+      if (editingBlock) {
+        await adminService.updateHostelBlock(editingBlock.id, blockData);
+        toast.success('Block updated successfully!');
+      } else {
+        await adminService.createHostelBlock(blockData);
+        toast.success('Block added successfully!');
+      }
+      await loadData();
+      setShowBlockModal(false);
+      setEditingBlock(null);
+      setBlockForm({ name: '', type: 'boys', floors: '', roomsPerFloor: '' });
+    } catch (err) {
+      console.error('Block operation error:', err);
+      toast.error(err.response?.data?.message || 'Failed to save block');
+    } finally {
+      setSubmitting(false);
     }
-    setShowBlockModal(false);
-    setEditingBlock(null);
-    setBlockForm({ name: '', type: 'boys', floors: '', roomsPerFloor: '' });
   };
 
   const openEditBlock = (block) => {
@@ -94,46 +113,39 @@ const HostelManagement = () => {
     setShowBlockModal(true);
   };
 
-  const deleteBlock = (id) => {
+  const deleteBlock = async (id) => {
     if (window.confirm('Are you sure you want to delete this block?')) {
-      setBlocks(blocks.filter(b => b.id !== id));
+      try {
+        await adminService.deleteHostelBlock(id);
+        toast.success('Block deleted successfully!');
+        await loadData();
+      } catch (err) {
+        console.error('Delete block error:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete block');
+      }
     }
   };
 
   // Warden Assignment
-  const handleAssignWarden = (e) => {
+  const handleAssignWarden = async (e) => {
     e.preventDefault();
-    const warden = wardens.find(w => w.id === parseInt(wardenAssignForm.wardenId));
-    const block = blocks.find(b => b.id === parseInt(wardenAssignForm.blockId));
-
-    if (warden && block) {
-      // Update blocks
-      setBlocks(blocks.map(b => {
-        if (b.id === block.id) {
-          return { ...b, warden: warden.name, wardenId: warden.id };
-        }
-        if (b.wardenId === warden.id) {
-          return { ...b, warden: 'Unassigned', wardenId: null };
-        }
-        return b;
-      }));
-
-      // Update wardens
-      setWardens(wardens.map(w => {
-        if (w.id === warden.id) {
-          return { ...w, assignedBlock: block.name };
-        }
-        if (w.assignedBlock === block.name) {
-          return { ...w, assignedBlock: 'Unassigned' };
-        }
-        return w;
-      }));
-
-      alert(`${warden.name} assigned to ${block.name} successfully!`);
+    try {
+      setSubmitting(true);
+      await adminService.assignWarden(parseInt(wardenAssignForm.blockId), parseInt(wardenAssignForm.wardenId));
+      toast.success('Warden assigned successfully!');
+      await loadData();
+      setShowWardenModal(false);
+      setWardenAssignForm({ wardenId: '', blockId: '' });
+    } catch (err) {
+      console.error('Assign warden error:', err);
+      toast.error(err.response?.data?.message || 'Failed to assign warden');
+    } finally {
+      setSubmitting(false);
     }
-    setShowWardenModal(false);
-    setWardenAssignForm({ wardenId: '', blockId: '' });
   };
+
+  if (loading) return <Loading fullScreen message="Loading hostel management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadData} fullScreen />;
 
   return (
     <div className="space-y-6">
@@ -464,15 +476,17 @@ const HostelManagement = () => {
                       setEditingBlock(null);
                       setBlockForm({ name: '', type: 'boys', floors: '', roomsPerFloor: '' });
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingBlock ? 'Save Changes' : 'Add Block'}
+                    {submitting ? 'Saving...' : editingBlock ? 'Save Changes' : 'Add Block'}
                   </button>
                 </div>
               </form>
@@ -547,15 +561,17 @@ const HostelManagement = () => {
                       setShowWardenModal(false);
                       setWardenAssignForm({ wardenId: '', blockId: '' });
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Assign Warden
+                    {submitting ? 'Assigning...' : 'Assign Warden'}
                   </button>
                 </div>
               </form>
