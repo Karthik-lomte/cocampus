@@ -72,8 +72,6 @@ function AttendanceManagement() {
   // Get unique departments for filter
   const departments = [...new Set(availableStudents.map(s => s.department))];
 
-  const attendanceRequests = clubData.attendanceRequests;
-
   const filteredRequests = attendanceRequests.filter(req => {
     if (filter === 'all') return true;
     return req.status === filter;

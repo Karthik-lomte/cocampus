@@ -822,6 +822,7 @@ function AssignmentManagement() {
                       </div>
                     );
                   })}
+                </div>
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
