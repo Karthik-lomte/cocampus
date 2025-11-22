@@ -1,67 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Search, Edit2, Save, X, User, Building } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function RoomManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [blockFilter, setBlockFilter] = useState('all');
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [blocks, setBlocks] = useState([]);
 
-  const [students, setStudents] = useState([
-    {
-      id: 1,
-      name: 'Rahul Sharma',
-      rollNo: 'CSE2022015',
-      roomNo: 'A-205',
-      floor: '2nd Floor',
-      block: 'Block A',
-      roomType: 'Double Sharing',
-      roommate: { name: 'Vikram Singh', rollNo: 'CSE2022016' },
-      phone: '+91 9876543210',
-      parentPhone: '+91 9876543211',
-      joinDate: '2022-08-15'
-    },
-    {
-      id: 2,
-      name: 'Priya Patel',
-      rollNo: 'ECE2021018',
-      roomNo: 'B-312',
-      floor: '3rd Floor',
-      block: 'Block B',
-      roomType: 'Single',
-      roommate: null,
-      phone: '+91 9876543212',
-      parentPhone: '+91 9876543213',
-      joinDate: '2021-08-10'
-    },
-    {
-      id: 3,
-      name: 'Amit Kumar',
-      rollNo: 'ME2022020',
-      roomNo: 'A-108',
-      floor: '1st Floor',
-      block: 'Block A',
-      roomType: 'Triple Sharing',
-      roommate: { name: 'Raj Verma', rollNo: 'ME2022021' },
-      phone: '+91 9876543214',
-      parentPhone: '+91 9876543215',
-      joinDate: '2022-08-15'
-    },
-    {
-      id: 4,
-      name: 'Sneha Reddy',
-      rollNo: 'CSE2022030',
-      roomNo: 'C-215',
-      floor: '2nd Floor',
-      block: 'Block C',
-      roomType: 'Double Sharing',
-      roommate: { name: 'Neha Gupta', rollNo: 'CSE2022031' },
-      phone: '+91 9876543216',
-      parentPhone: '+91 9876543217',
-      joinDate: '2022-08-15'
+  // Load Students/Residents
+  useEffect(() => {
+    loadResidents();
+  }, []);
+
+  const loadResidents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getResidents();
+      setStudents(data.residents || data || []);
+      setBlocks(data.blocks || ['Block A', 'Block B', 'Block C', 'Block D']);
+    } catch (err) {
+      console.error('Error loading residents:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const [editFormData, setEditFormData] = useState({
     roomNo: '',
@@ -72,7 +50,6 @@ function RoomManagement() {
     roommateRollNo: ''
   });
 
-  const blocks = ['Block A', 'Block B', 'Block C', 'Block D'];
   const floors = ['Ground Floor', '1st Floor', '2nd Floor', '3rd Floor', '4th Floor'];
   const roomTypes = ['Single', 'Double Sharing', 'Triple Sharing'];
 
@@ -97,27 +74,40 @@ function RoomManagement() {
     setShowEditModal(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    setStudents(students.map(student => {
-      if (student.id === selectedStudent.id) {
-        return {
-          ...student,
-          roomNo: editFormData.roomNo,
-          floor: editFormData.floor,
-          block: editFormData.block,
-          roomType: editFormData.roomType,
-          roommate: editFormData.roommateName ? {
-            name: editFormData.roommateName,
-            rollNo: editFormData.roommateRollNo
-          } : null
-        };
-      }
-      return student;
-    }));
-    alert('Room details updated successfully!');
-    setShowEditModal(false);
+    try {
+      setSubmitting(true);
+      await hostelService.allocateRoom({
+        residentId: selectedStudent.id,
+        roomNo: editFormData.roomNo,
+        floor: editFormData.floor,
+        block: editFormData.block,
+        roomType: editFormData.roomType,
+        roommate: editFormData.roommateName ? {
+          name: editFormData.roommateName,
+          rollNo: editFormData.roommateRollNo
+        } : null
+      });
+      toast.success('Room details updated successfully!');
+      setShowEditModal(false);
+      await loadResidents();
+    } catch (err) {
+      console.error('Error updating room details:', err);
+      toast.error(err.response?.data?.message || 'Failed to update room details');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading room management..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadResidents} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -398,16 +388,18 @@ function RoomManagement() {
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:shadow-lg font-medium flex items-center justify-center gap-2"
+                      disabled={submitting}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:shadow-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Save size={18} />
-                      Save Changes
+                      {submitting ? 'Saving...' : 'Save Changes'}
                     </button>
                   </div>
                 </form>

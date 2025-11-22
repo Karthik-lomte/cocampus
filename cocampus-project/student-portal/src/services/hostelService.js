@@ -7,6 +7,17 @@ export const hostelService = {
     return response.data.data;
   },
 
+  // Profile
+  getProfile: async () => {
+    const response = await api.get('/hostel/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (profileData) => {
+    const response = await api.put('/hostel/profile', profileData);
+    return response.data.data;
+  },
+
   // Hostel Management
   getBlocks: async () => {
     const response = await api.get('/hostel/blocks');

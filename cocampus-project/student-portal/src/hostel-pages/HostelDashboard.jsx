@@ -1,28 +1,64 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Home, Users, DoorOpen, Utensils, Clock, CheckCircle, XCircle, TrendingUp } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function HostelDashboard() {
-  const stats = {
-    totalStudents: 450,
-    totalRooms: 225,
-    occupancyRate: 92,
-    pendingGatePasses: 12,
-    approvedToday: 8,
-    blocksCount: 4
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      totalStudents: 0,
+      totalRooms: 0,
+      occupancyRate: 0,
+      pendingGatePasses: 0,
+      approvedToday: 0,
+      blocksCount: 0
+    },
+    recentGatePasses: [],
+    blockOccupancy: []
+  });
+
+  // Load Dashboard
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getDashboard();
+      setDashboardData({
+        stats: data.stats || {},
+        recentGatePasses: data.recentGatePasses || [],
+        blockOccupancy: data.blockOccupancy || []
+      });
+    } catch (err) {
+      console.error('Error loading hostel dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentGatePasses = [
-    { id: 1, studentName: 'Rahul Sharma', roomNo: 'A-205', type: 'Medical', status: 'pending', time: '2 hours ago' },
-    { id: 2, studentName: 'Priya Patel', roomNo: 'B-312', type: 'Family', status: 'pending', time: '3 hours ago' },
-    { id: 3, studentName: 'Amit Kumar', roomNo: 'A-108', type: 'Personal', status: 'approved', time: '5 hours ago' }
-  ];
+  const { stats, recentGatePasses, blockOccupancy } = dashboardData;
 
-  const blockOccupancy = [
-    { block: 'Block A', total: 60, occupied: 58, percentage: 97 },
-    { block: 'Block B', total: 60, occupied: 55, percentage: 92 },
-    { block: 'Block C', total: 55, occupied: 50, percentage: 91 },
-    { block: 'Block D', total: 50, occupied: 45, percentage: 90 }
-  ];
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading hostel dashboard..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
