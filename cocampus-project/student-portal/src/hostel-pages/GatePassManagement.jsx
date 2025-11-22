@@ -1,8 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, Eye, X, User, Calendar, Phone, FileText, Search } from 'lucide-react';
+import { hostelService } from '../services/hostelService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function GatePassManagement() {
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -10,80 +21,26 @@ function GatePassManagement() {
   const [remarks, setRemarks] = useState('');
   const [filter, setFilter] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
+  const [gatePassRequests, setGatePassRequests] = useState([]);
 
-  // Gate pass requests data
-  const [gatePassRequests, setGatePassRequests] = useState([
-    {
-      id: 1,
-      studentName: 'Rahul Sharma',
-      rollNo: 'CSE2022015',
-      roomNo: 'A-205',
-      hostelBlock: 'Block A',
-      passType: 'Medical',
-      reason: 'Need to visit hospital for regular checkup and collect medical reports',
-      date: '2024-11-20',
-      outTime: '09:00',
-      expectedReturn: '14:00',
-      parentContact: '+91 9876543210',
-      supportingDocs: 'medical_appointment.pdf',
-      status: 'pending',
-      requestDate: '2024-11-18'
-    },
-    {
-      id: 2,
-      studentName: 'Priya Patel',
-      rollNo: 'ECE2021018',
-      roomNo: 'B-312',
-      hostelBlock: 'Block B',
-      passType: 'Family Function',
-      reason: 'Sister wedding ceremony at hometown',
-      date: '2024-11-22',
-      outTime: '06:00',
-      expectedReturn: '21:00',
-      parentContact: '+91 9876543211',
-      supportingDocs: null,
-      status: 'pending',
-      requestDate: '2024-11-17'
-    },
-    {
-      id: 3,
-      studentName: 'Amit Kumar',
-      rollNo: 'ME2022020',
-      roomNo: 'A-108',
-      hostelBlock: 'Block A',
-      passType: 'Personal Work',
-      reason: 'Need to collect passport from passport office',
-      date: '2024-11-19',
-      outTime: '10:00',
-      expectedReturn: '16:00',
-      parentContact: '+91 9876543212',
-      supportingDocs: 'passport_receipt.pdf',
-      status: 'approved',
-      requestDate: '2024-11-16',
-      approvedBy: 'Mr. Sharma (Warden)',
-      approvedDate: '2024-11-17',
-      remarks: 'Approved. Return before 4 PM.'
-    },
-    {
-      id: 4,
-      studentName: 'Sneha Reddy',
-      rollNo: 'CSE2022030',
-      roomNo: 'C-215',
-      hostelBlock: 'Block C',
-      passType: 'Medical',
-      reason: 'Dental appointment',
-      date: '2024-11-18',
-      outTime: '11:00',
-      expectedReturn: '13:00',
-      parentContact: '+91 9876543213',
-      supportingDocs: null,
-      status: 'rejected',
-      requestDate: '2024-11-15',
-      rejectedBy: 'Mr. Sharma (Warden)',
-      rejectedDate: '2024-11-16',
-      remarks: 'Please provide dental clinic appointment slip.'
+  // Load Gate Pass Requests
+  useEffect(() => {
+    loadGatePasses();
+  }, []);
+
+  const loadGatePasses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getGatePasses();
+      setGatePassRequests(data.gatePasses || data || []);
+    } catch (err) {
+      console.error('Error loading gate passes:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const filteredRequests = gatePassRequests.filter(req => {
     const matchesFilter = filter === 'all' || req.status === filter;
@@ -112,30 +69,29 @@ function GatePassManagement() {
     setShowDetailsModal(false);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
 
-    // Update the request status
-    setGatePassRequests(gatePassRequests.map(req => {
-      if (req.id === selectedRequest.id) {
-        return {
-          ...req,
-          status: approvalAction === 'approve' ? 'approved' : 'rejected',
-          remarks: remarks,
-          [`${approvalAction}dBy`]: 'Mr. Sharma (Warden)',
-          [`${approvalAction}dDate`]: new Date().toISOString().split('T')[0]
-        };
-      }
-      return req;
-    }));
-
-    alert(`Gate pass ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+    try {
+      setSubmitting(true);
+      await hostelService.approveGatePass(selectedRequest.id, {
+        status: approvalAction === 'approve' ? 'approved' : 'rejected',
+        remarks: remarks
+      });
+      toast.success(`Gate pass ${approvalAction}d successfully!`);
+      setShowApprovalModal(false);
+      setRemarks('');
+      await loadGatePasses();
+    } catch (err) {
+      console.error('Error processing gate pass:', err);
+      toast.error(err.response?.data?.message || 'Failed to process gate pass');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -149,6 +105,15 @@ function GatePassManagement() {
       {status.toUpperCase()}
     </span>;
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading gate pass requests..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadGatePasses} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -544,15 +509,17 @@ function GatePassManagement() {
                     <button
                       type="button"
                       onClick={() => setShowApprovalModal(false)}
-                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg font-medium`}
+                      disabled={submitting}
+                      className={`flex-1 px-4 py-3 ${approvalAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                      Confirm
+                      {submitting ? 'Processing...' : 'Confirm'}
                     </button>
                   </div>
                 </form>
