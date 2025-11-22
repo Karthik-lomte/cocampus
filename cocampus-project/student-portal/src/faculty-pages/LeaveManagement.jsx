@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, FileText, Calendar, CheckCircle, XCircle, Clock, Upload, Briefcase } from 'lucide-react';
-import { leaveData } from '../faculty-data/leaveData';
-import { facultyData } from '../faculty-data/facultyData';
+import { facultyService } from '../services/facultyService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 function LeaveManagement() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [leaveData, setLeaveData] = useState(null);
+  const [applying, setApplying] = useState(false);
+
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [formData, setFormData] = useState({
     leaveType: '',
@@ -15,18 +23,66 @@ function LeaveManagement() {
     document: null
   });
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    loadLeaveData();
+  }, []);
+
+  const loadLeaveData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      // Try getLeaveRequests or getLeaves depending on service implementation
+      const data = await facultyService.getLeaveRequests?.() ||
+                    await facultyService.getLeaves?.();
+      setLeaveData(data);
+    } catch (err) {
+      console.error('Leave data error:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert('Leave application submitted successfully!');
-    setShowApplyForm(false);
-    setFormData({
-      leaveType: '',
-      startDate: '',
-      endDate: '',
-      reason: '',
-      substituteTeacher: '',
-      document: null
-    });
+
+    try {
+      setApplying(true);
+
+      const leaveFormData = new FormData();
+      leaveFormData.append('leaveType', formData.leaveType);
+      leaveFormData.append('startDate', formData.startDate);
+      leaveFormData.append('endDate', formData.endDate);
+      leaveFormData.append('reason', formData.reason);
+      leaveFormData.append('days', calculateDays());
+      if (formData.substituteTeacher) {
+        leaveFormData.append('substituteTeacher', formData.substituteTeacher);
+      }
+      if (formData.document) {
+        leaveFormData.append('document', formData.document);
+      }
+
+      await facultyService.applyLeave(leaveFormData);
+
+      toast.success('Leave application submitted successfully!');
+      setShowApplyForm(false);
+      setFormData({
+        leaveType: '',
+        startDate: '',
+        endDate: '',
+        reason: '',
+        substituteTeacher: '',
+        document: null
+      });
+
+      // Reload leave data
+      await loadLeaveData();
+    } catch (err) {
+      console.error('Apply leave error:', err);
+      toast.error(err.response?.data?.message || 'Failed to submit leave application');
+    } finally {
+      setApplying(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -61,8 +117,20 @@ function LeaveManagement() {
     return 0;
   };
 
+  if (loading) return <Loading fullScreen message="Loading leave management..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadLeaveData} fullScreen />;
+
   // Calculate total available leaves
-  const totalAvailableLeaves = Object.values(leaveData.balance).reduce((sum, val) => sum + val, 0);
+  const leaveBalance = leaveData?.balance || {};
+  const leaveTypes = leaveData?.leaveTypes || [
+    { type: 'sick', name: 'Sick Leave', color: 'bg-gradient-to-r from-red-500 to-pink-500' },
+    { type: 'casual', name: 'Casual Leave', color: 'bg-gradient-to-r from-blue-500 to-cyan-500' },
+    { type: 'earned', name: 'Earned Leave', color: 'bg-gradient-to-r from-green-500 to-emerald-500' },
+    { type: 'maternity', name: 'Maternity Leave', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+    { type: 'paternity', name: 'Paternity Leave', color: 'bg-gradient-to-r from-indigo-500 to-blue-500' }
+  ];
+  const leaveHistory = leaveData?.leaveHistory || leaveData?.leaves || [];
+  const totalAvailableLeaves = Object.values(leaveBalance).reduce((sum, val) => sum + val, 0);
 
   return (
     <div className="space-y-6">
@@ -99,8 +167,8 @@ function LeaveManagement() {
 
       {/* Leave Balance Cards - Enhanced Design */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {leaveData.leaveTypes.map((type, index) => {
-          const availableDays = leaveData.balance[type.type];
+        {leaveTypes.map((type, index) => {
+          const availableDays = leaveBalance[type.type] || 0;
           const percentage = (availableDays / 12) * 100; // Assuming 12 is max for each type
 
           return (
@@ -165,9 +233,9 @@ function LeaveManagement() {
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 >
                   <option value="">Select Leave Type</option>
-                  {leaveData.leaveTypes.map(type => (
+                  {leaveTypes.map(type => (
                     <option key={type.type} value={type.type}>
-                      {type.name} ({leaveData.balance[type.type]} days available)
+                      {type.name} ({leaveBalance[type.type] || 0} days available)
                     </option>
                   ))}
                 </select>
@@ -251,15 +319,17 @@ function LeaveManagement() {
               <button
                 type="button"
                 onClick={() => setShowApplyForm(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                disabled={applying}
+                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-shadow font-medium"
+                disabled={applying}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-shadow font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit Application
+                {applying ? 'Submitting...' : 'Submit Application'}
               </button>
             </div>
           </form>
@@ -295,76 +365,92 @@ function LeaveManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {leaveData.leaveHistory.map((leave, index) => (
-                <motion.tr
-                  key={leave.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="hover:bg-gray-50"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <FileText className="text-green-600 mr-2" size={18} />
-                      <span className="font-medium text-gray-900">{leave.type}</span>
-                    </div>
+              {leaveHistory.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                    <Briefcase size={48} className="mx-auto mb-4 text-gray-300" />
+                    <p>No leave history found</p>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                      {leave.days} days
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
-                    {leave.reason}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {new Date(leave.appliedDate).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(leave.status)}
-                  </td>
-                </motion.tr>
-              ))}
+                </tr>
+              ) : (
+                leaveHistory.map((leave, index) => (
+                  <motion.tr
+                    key={leave._id || leave.id || index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="hover:bg-gray-50"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <FileText className="text-green-600 mr-2" size={18} />
+                        <span className="font-medium text-gray-900">{leave.type || leave.leaveType}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {leave.startDate ? new Date(leave.startDate).toLocaleDateString() : 'N/A'} - {leave.endDate ? new Date(leave.endDate).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                        {leave.days || 0} days
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                      {leave.reason || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {leave.appliedDate ? new Date(leave.appliedDate).toLocaleDateString() : leave.createdAt ? new Date(leave.createdAt).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(leave.status || 'pending')}
+                    </td>
+                  </motion.tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-gray-200">
-          {leaveData.leaveHistory.map((leave, index) => (
-            <motion.div
-              key={leave.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: index * 0.1 }}
-              className="p-4 hover:bg-gray-50"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="text-green-600" size={18} />
-                  <span className="font-bold text-gray-900">{leave.type}</span>
+          {leaveHistory.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <Briefcase size={48} className="mx-auto mb-4 text-gray-300" />
+              <p>No leave history found</p>
+            </div>
+          ) : (
+            leaveHistory.map((leave, index) => (
+              <motion.div
+                key={leave._id || leave.id || index}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: index * 0.1 }}
+                className="p-4 hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="text-green-600" size={18} />
+                    <span className="font-bold text-gray-900">{leave.type || leave.leaveType}</span>
+                  </div>
+                  {getStatusBadge(leave.status || 'pending')}
                 </div>
-                {getStatusBadge(leave.status)}
-              </div>
-              <div className="space-y-2 text-sm">
-                <p className="text-gray-600">
-                  <span className="font-medium">Duration:</span> {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-medium">Days:</span> <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">{leave.days}</span>
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-medium">Reason:</span> {leave.reason}
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-medium">Applied:</span> {new Date(leave.appliedDate).toLocaleDateString()}
-                </p>
-              </div>
-            </motion.div>
-          ))}
+                <div className="space-y-2 text-sm">
+                  <p className="text-gray-600">
+                    <span className="font-medium">Duration:</span> {leave.startDate ? new Date(leave.startDate).toLocaleDateString() : 'N/A'} - {leave.endDate ? new Date(leave.endDate).toLocaleDateString() : 'N/A'}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Days:</span> <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">{leave.days || 0}</span>
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Reason:</span> {leave.reason || 'N/A'}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Applied:</span> {leave.appliedDate ? new Date(leave.appliedDate).toLocaleDateString() : leave.createdAt ? new Date(leave.createdAt).toLocaleDateString() : 'N/A'}
+                  </p>
+                </div>
+              </motion.div>
+            ))
+          )}
         </div>
       </motion.div>
     </div>
