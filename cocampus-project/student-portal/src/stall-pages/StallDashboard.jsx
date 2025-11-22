@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,31 +10,43 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
+import { stallService } from '../services/stallService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const StallDashboard = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
-  const [stats] = useState({
-    todayOrders: 45,
-    pendingOrders: 8,
-    todayRevenue: 3250,
-    totalProducts: 24
-  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({});
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [topProducts, setTopProducts] = useState([]);
 
-  const [recentOrders] = useState([
-    { id: 'ORD101', customer: 'Rahul S.', items: 2, amount: 85, status: 'pending', time: '2 min ago' },
-    { id: 'ORD100', customer: 'Priya P.', items: 1, amount: 40, status: 'preparing', time: '5 min ago' },
-    { id: 'ORD099', customer: 'Amit K.', items: 3, amount: 120, status: 'completed', time: '8 min ago' },
-    { id: 'ORD098', customer: 'Neha G.', items: 2, amount: 75, status: 'completed', time: '12 min ago' },
-    { id: 'ORD097', customer: 'Vikram J.', items: 1, amount: 50, status: 'completed', time: '15 min ago' }
-  ]);
+  useEffect(() => {
+    loadDashboard();
+  }, []);
 
-  const [topProducts] = useState([
-    { name: 'Masala Tea', sold: 28, revenue: 560 },
-    { name: 'Samosa', sold: 22, revenue: 330 },
-    { name: 'Coffee', sold: 18, revenue: 540 },
-    { name: 'Vada Pav', sold: 15, revenue: 300 }
-  ]);
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await stallService.getDashboard();
+      setStats(data.stats || {});
+      setRecentOrders(data.recentOrders || []);
+      setTopProducts(data.topProducts || []);
+    } catch (err) {
+      console.error('Error loading stall dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading stall dashboard..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
 
   const getStatusIcon = (status) => {
     switch (status) {

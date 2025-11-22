@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -11,31 +11,55 @@ import {
   X,
   Store
 } from 'lucide-react';
+import { stallService } from '../services/stallService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const StallProfile = () => {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [profile, setProfile] = useState({
-    stallName: 'Tea Corner',
-    ownerName: 'Suresh Sharma',
-    email: 'suresh.teacorner@campus.edu',
-    phone: '+91 9876543211',
-    location: 'Ground Floor, Block B',
-    category: 'Beverages',
-    openTime: '08:00',
-    closeTime: '20:00',
-    description: 'Serving fresh tea, coffee and snacks since 2020',
-    rating: 4.8,
-    totalOrders: 5642,
-    totalRevenue: 282100
-  });
+  const [profile, setProfile] = useState({});
+  const [editedProfile, setEditedProfile] = useState({});
 
-  const [editedProfile, setEditedProfile] = useState({ ...profile });
+  useEffect(() => {
+    loadProfile();
+  }, []);
 
-  const handleSave = () => {
-    setProfile(editedProfile);
-    setIsEditing(false);
-    alert('Profile updated successfully!');
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await stallService.getProfile();
+      setProfile(data);
+      setEditedProfile(data);
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async () => {
+    try {
+      setSubmitting(true);
+      await stallService.updateProfile(editedProfile);
+      setProfile(editedProfile);
+      setIsEditing(false);
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Loading fullScreen message="Loading profile..." />;
+  if (error) return <ErrorMessage error={error} onRetry={loadProfile} fullScreen />;
 
   const handleCancel = () => {
     setEditedProfile({ ...profile });
