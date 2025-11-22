@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Store,
@@ -10,31 +10,49 @@ import {
   Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { canteenService } from '../services/canteenService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const CanteenDashboard = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
-  const [stats] = useState({
-    totalStalls: 8,
-    activeOrders: 24,
-    todayRevenue: 15680,
-    totalCustomers: 342
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [dashboardData, setDashboardData] = useState({
+    stats: {},
+    recentOrders: [],
+    topStalls: []
   });
 
-  const [recentOrders] = useState([
-    { id: 'ORD001', stall: 'Tea Corner', items: 3, amount: 120, status: 'completed', time: '10:30 AM' },
-    { id: 'ORD002', stall: 'Snacks Hub', items: 2, amount: 85, status: 'preparing', time: '10:25 AM' },
-    { id: 'ORD003', stall: 'Juice Bar', items: 1, amount: 60, status: 'pending', time: '10:20 AM' },
-    { id: 'ORD004', stall: 'Main Canteen', items: 4, amount: 250, status: 'completed', time: '10:15 AM' },
-    { id: 'ORD005', stall: 'Bakery', items: 2, amount: 95, status: 'preparing', time: '10:10 AM' }
-  ]);
+  // Load Dashboard
+  useEffect(() => {
+    loadDashboard();
+  }, []);
 
-  const [topStalls] = useState([
-    { name: 'Main Canteen', orders: 156, revenue: 8500, trend: 'up' },
-    { name: 'Tea Corner', orders: 134, revenue: 4200, trend: 'up' },
-    { name: 'Snacks Hub', orders: 98, revenue: 3800, trend: 'down' },
-    { name: 'Juice Bar', orders: 87, revenue: 2600, trend: 'up' }
-  ]);
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await canteenService.getDashboard();
+      setDashboardData({
+        stats: data.stats || {},
+        recentOrders: data.recentOrders || [],
+        topStalls: data.topStalls || []
+      });
+    } catch (err) {
+      console.error('Error loading canteen dashboard:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { stats, recentOrders, topStalls } = dashboardData;
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -44,6 +62,15 @@ const CanteenDashboard = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading canteen dashboard..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadDashboard} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">

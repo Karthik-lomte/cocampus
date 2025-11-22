@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store,
@@ -14,94 +14,21 @@ import {
   ShoppingBag,
   MapPin
 } from 'lucide-react';
+import { canteenService } from '../services/canteenService';
+import { useToast } from '../components/Toast';
+import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 
 const StallManagement = () => {
-  const [stalls, setStalls] = useState([
-    {
-      id: 1,
-      name: 'Main Canteen',
-      owner: 'Rajesh Kumar',
-      phone: '+91 9876543210',
-      email: 'rajesh@email.com',
-      location: 'Ground Floor, Block A',
-      category: 'Full Meals',
-      status: 'active',
-      todayOrders: 156,
-      todayRevenue: 8500,
-      rating: 4.5,
-      joinedDate: '2024-01-15'
-    },
-    {
-      id: 2,
-      name: 'Tea Corner',
-      owner: 'Suresh Sharma',
-      phone: '+91 9876543211',
-      email: 'suresh@email.com',
-      location: 'Ground Floor, Block B',
-      category: 'Beverages',
-      status: 'active',
-      todayOrders: 134,
-      todayRevenue: 4200,
-      rating: 4.8,
-      joinedDate: '2024-02-20'
-    },
-    {
-      id: 3,
-      name: 'Snacks Hub',
-      owner: 'Priya Patel',
-      phone: '+91 9876543212',
-      email: 'priya@email.com',
-      location: '1st Floor, Block A',
-      category: 'Snacks',
-      status: 'active',
-      todayOrders: 98,
-      todayRevenue: 3800,
-      rating: 4.3,
-      joinedDate: '2024-03-10'
-    },
-    {
-      id: 4,
-      name: 'Juice Bar',
-      owner: 'Amit Singh',
-      phone: '+91 9876543213',
-      email: 'amit@email.com',
-      location: 'Ground Floor, Sports Block',
-      category: 'Beverages',
-      status: 'active',
-      todayOrders: 87,
-      todayRevenue: 2600,
-      rating: 4.6,
-      joinedDate: '2024-04-05'
-    },
-    {
-      id: 5,
-      name: 'Bakery Delights',
-      owner: 'Neha Gupta',
-      phone: '+91 9876543214',
-      email: 'neha@email.com',
-      location: '1st Floor, Block B',
-      category: 'Bakery',
-      status: 'active',
-      todayOrders: 76,
-      todayRevenue: 2200,
-      rating: 4.7,
-      joinedDate: '2024-05-12'
-    },
-    {
-      id: 6,
-      name: 'Fast Food Corner',
-      owner: 'Vikram Joshi',
-      phone: '+91 9876543215',
-      email: 'vikram@email.com',
-      location: 'Ground Floor, Block C',
-      category: 'Fast Food',
-      status: 'inactive',
-      todayOrders: 0,
-      todayRevenue: 0,
-      rating: 4.2,
-      joinedDate: '2024-06-01'
-    }
-  ]);
+  const toast = useToast();
+
+  // Loading and Error States
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Stalls Data
+  const [stalls, setStalls] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -123,58 +50,95 @@ const StallManagement = () => {
 
   const categories = ['Full Meals', 'Beverages', 'Snacks', 'Bakery', 'Fast Food', 'Other'];
 
+  // Load Stalls Data
+  useEffect(() => {
+    loadStalls();
+  }, []);
+
+  const loadStalls = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await canteenService.getStalls();
+      setStalls(data || []);
+    } catch (err) {
+      console.error('Error loading stalls:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredStalls = stalls.filter(stall => {
-    const matchesSearch = stall.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          stall.owner.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || stall.category === categoryFilter;
+    const matchesSearch = stall?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          stall?.owner?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || stall?.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddStall = (e) => {
+  const handleAddStall = async (e) => {
     e.preventDefault();
-    const finalCategory = formData.category === 'Other' ? formData.customCategory : formData.category;
-    const newStall = {
-      id: stalls.length + 1,
-      name: formData.name,
-      owner: formData.owner,
-      phone: formData.phone,
-      email: formData.email,
-      location: formData.location,
-      category: finalCategory,
-      status: 'active',
-      todayOrders: 0,
-      todayRevenue: 0,
-      rating: 0,
-      joinedDate: new Date().toISOString().split('T')[0]
-    };
-    setStalls([...stalls, newStall]);
-    setShowAddModal(false);
-    setFormData({ name: '', owner: '', phone: '', email: '', location: '', category: '', customCategory: '', password: '' });
-    alert(`Stall added successfully! Login credentials:\nEmail: ${formData.email}\nPassword: ${formData.password}`);
+    try {
+      setSubmitting(true);
+      const finalCategory = formData.category === 'Other' ? formData.customCategory : formData.category;
+      const stallData = {
+        name: formData.name,
+        owner: formData.owner,
+        phone: formData.phone,
+        email: formData.email,
+        location: formData.location,
+        category: finalCategory,
+        password: formData.password
+      };
+      await canteenService.createStall(stallData);
+      toast.success(`Stall added successfully! Login credentials sent to ${formData.email}`);
+      setShowAddModal(false);
+      setFormData({ name: '', owner: '', phone: '', email: '', location: '', category: '', customCategory: '', password: '' });
+      await loadStalls();
+    } catch (err) {
+      console.error('Error adding stall:', err);
+      toast.error(err.response?.data?.message || 'Failed to add stall');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditStall = (e) => {
+  const handleEditStall = async (e) => {
     e.preventDefault();
-    const finalCategory = formData.category === 'Other' ? formData.customCategory : formData.category;
-    setStalls(stalls.map(stall =>
-      stall.id === selectedStall.id ? {
-        ...stall,
+    try {
+      setSubmitting(true);
+      const finalCategory = formData.category === 'Other' ? formData.customCategory : formData.category;
+      const stallData = {
         name: formData.name,
         owner: formData.owner,
         phone: formData.phone,
         email: formData.email,
         location: formData.location,
         category: finalCategory
-      } : stall
-    ));
-    setShowEditModal(false);
-    setSelectedStall(null);
-    alert('Stall updated successfully!');
+      };
+      await canteenService.updateStall(selectedStall.id, stallData);
+      toast.success('Stall updated successfully!');
+      setShowEditModal(false);
+      setSelectedStall(null);
+      await loadStalls();
+    } catch (err) {
+      console.error('Error updating stall:', err);
+      toast.error(err.response?.data?.message || 'Failed to update stall');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteStall = (stallId) => {
+  const handleDeleteStall = async (stallId) => {
     if (window.confirm('Are you sure you want to delete this stall?')) {
-      setStalls(stalls.filter(stall => stall.id !== stallId));
+      try {
+        await canteenService.updateStall(stallId, { status: 'deleted' });
+        toast.success('Stall deleted successfully!');
+        await loadStalls();
+      } catch (err) {
+        console.error('Error deleting stall:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete stall');
+      }
     }
   };
 
@@ -199,11 +163,27 @@ const StallManagement = () => {
     setShowEditModal(true);
   };
 
-  const toggleStallStatus = (stallId) => {
-    setStalls(stalls.map(stall =>
-      stall.id === stallId ? { ...stall, status: stall.status === 'active' ? 'inactive' : 'active' } : stall
-    ));
+  const toggleStallStatus = async (stallId) => {
+    const stall = stalls.find(s => s.id === stallId);
+    const newStatus = stall?.status === 'active' ? 'inactive' : 'active';
+    try {
+      await canteenService.updateStall(stallId, { status: newStatus });
+      toast.success(`Stall ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+      await loadStalls();
+    } catch (err) {
+      console.error('Error toggling stall status:', err);
+      toast.error(err.response?.data?.message || 'Failed to update stall status');
+    }
   };
+
+  // Loading and Error States
+  if (loading) {
+    return <Loading fullScreen message="Loading stalls..." />;
+  }
+
+  if (error) {
+    return <ErrorMessage error={error} onRetry={loadStalls} fullScreen />;
+  }
 
   return (
     <div className="space-y-6">
@@ -264,36 +244,36 @@ const StallManagement = () => {
                     <Store className="w-6 h-6 text-amber-600" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">{stall.name}</h3>
-                    <p className="text-sm text-gray-600">{stall.category}</p>
+                    <h3 className="font-semibold text-gray-900">{stall?.name || 'N/A'}</h3>
+                    <p className="text-sm text-gray-600">{stall?.category || 'N/A'}</p>
                   </div>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${
-                  stall.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  stall?.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                 }`}>
-                  {stall.status}
+                  {stall?.status || 'N/A'}
                 </span>
               </div>
 
               <div className="space-y-2 mb-4">
                 <p className="text-sm text-gray-600 flex items-center">
-                  <span className="font-medium mr-2">Owner:</span> {stall.owner}
+                  <span className="font-medium mr-2">Owner:</span> {stall?.owner || 'N/A'}
                 </p>
                 <p className="text-sm text-gray-600 flex items-center">
-                  <MapPin className="w-4 h-4 mr-2 text-gray-400" /> {stall.location}
+                  <MapPin className="w-4 h-4 mr-2 text-gray-400" /> {stall?.location || 'N/A'}
                 </p>
                 <p className="text-sm text-gray-600 flex items-center">
-                  <Phone className="w-4 h-4 mr-2 text-gray-400" /> {stall.phone}
+                  <Phone className="w-4 h-4 mr-2 text-gray-400" /> {stall?.phone || 'N/A'}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
                 <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900">{stall.todayOrders}</p>
+                  <p className="text-lg font-bold text-gray-900">{stall?.todayOrders || 0}</p>
                   <p className="text-xs text-gray-600">Orders Today</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-green-600">₹{stall.todayRevenue.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-green-600">₹{(stall?.todayRevenue || 0).toLocaleString()}</p>
                   <p className="text-xs text-gray-600">Revenue</p>
                 </div>
               </div>
@@ -301,7 +281,7 @@ const StallManagement = () => {
               <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <div className="flex items-center space-x-1">
                   <span className="text-yellow-500">★</span>
-                  <span className="text-sm font-medium">{stall.rating}</span>
+                  <span className="text-sm font-medium">{stall?.rating || 0}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button
@@ -460,9 +440,10 @@ const StallManagement = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Stall
+                    {submitting ? 'Adding...' : 'Add Stall'}
                   </button>
                 </div>
               </form>
@@ -581,9 +562,10 @@ const StallManagement = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>

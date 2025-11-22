@@ -7,6 +7,17 @@ export const canteenService = {
     return response.data.data;
   },
 
+  // Profile
+  getProfile: async () => {
+    const response = await api.get('/canteen/profile');
+    return response.data.data;
+  },
+
+  updateProfile: async (profileData) => {
+    const response = await api.put('/canteen/profile', profileData);
+    return response.data.data;
+  },
+
   // Stalls Management
   getStalls: async () => {
     const response = await api.get('/canteen/stalls');
