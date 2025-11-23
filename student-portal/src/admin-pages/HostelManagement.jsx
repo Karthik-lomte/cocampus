@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
@@ -14,73 +14,105 @@ import {
   Phone,
   Mail
 } from 'lucide-react';
+import adminService from '../api/adminService';
 
 const HostelManagement = () => {
-  // Blocks State
-  const [blocks, setBlocks] = useState([
-    { id: 1, name: 'Block A - Boys', type: 'boys', floors: 4, roomsPerFloor: 20, totalRooms: 80, warden: 'Mr. Vikram Singh', wardenId: 1 },
-    { id: 2, name: 'Block B - Boys', type: 'boys', floors: 3, roomsPerFloor: 15, totalRooms: 45, warden: 'Mr. Rajesh Kumar', wardenId: 2 },
-    { id: 3, name: 'Block C - Girls', type: 'girls', floors: 4, roomsPerFloor: 25, totalRooms: 100, warden: 'Mrs. Sunita Devi', wardenId: 3 },
-    { id: 4, name: 'Block D - Girls', type: 'girls', floors: 3, roomsPerFloor: 18, totalRooms: 54, warden: 'Mrs. Priya Sharma', wardenId: 4 }
-  ]);
-
-  // Wardens State
+  const [loading, setLoading] = useState(true);
+  const [blocks, setBlocks] = useState([]);
+  const [stats, setStats] = useState({
+    totalBlocks: 0,
+    totalRooms: 0,
+    occupiedRooms: 0,
+    availableRooms: 0
+  });
   const [wardens, setWardens] = useState([
-    { id: 1, name: 'Mr. Vikram Singh', email: 'vikram@university.edu', phone: '+91 9876543214', assignedBlock: 'Block A - Boys' },
-    { id: 2, name: 'Mr. Rajesh Kumar', email: 'rajesh@university.edu', phone: '+91 9876543215', assignedBlock: 'Block B - Boys' },
-    { id: 3, name: 'Mrs. Sunita Devi', email: 'sunita@university.edu', phone: '+91 9876543216', assignedBlock: 'Block C - Girls' },
-    { id: 4, name: 'Mrs. Priya Sharma', email: 'priya@university.edu', phone: '+91 9876543217', assignedBlock: 'Block D - Girls' },
+    { id: 1, name: 'Mr. Vikram Singh', email: 'vikram@university.edu', phone: '+91 9876543214', assignedBlock: 'Unassigned' },
+    { id: 2, name: 'Mr. Rajesh Kumar', email: 'rajesh@university.edu', phone: '+91 9876543215', assignedBlock: 'Unassigned' },
+    { id: 3, name: 'Mrs. Sunita Devi', email: 'sunita@university.edu', phone: '+91 9876543216', assignedBlock: 'Unassigned' },
+    { id: 4, name: 'Mrs. Priya Sharma', email: 'priya@university.edu', phone: '+91 9876543217', assignedBlock: 'Unassigned' },
     { id: 5, name: 'Mr. Anil Verma', email: 'anil@university.edu', phone: '+91 9876543218', assignedBlock: 'Unassigned' }
   ]);
 
-  // UI State
   const [activeView, setActiveView] = useState('blocks');
-
-  // Modals State
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showWardenModal, setShowWardenModal] = useState(false);
   const [editingBlock, setEditingBlock] = useState(null);
 
-  // Form Data
   const [blockForm, setBlockForm] = useState({
-    name: '', type: 'boys', floors: '', roomsPerFloor: ''
+    name: '', type: 'boys', floors: '', roomsPerFloor: '', warden: ''
   });
   const [wardenAssignForm, setWardenAssignForm] = useState({
     wardenId: '', blockId: ''
   });
 
-  // Calculate Stats
-  const totalRooms = blocks.reduce((sum, block) => sum + block.totalRooms, 0);
+  useEffect(() => {
+    fetchHostelData();
+  }, []);
+
+  const fetchHostelData = async () => {
+    try {
+      setLoading(true);
+      const [blocksRes, statsRes] = await Promise.all([
+        adminService.getHostelBlocks(),
+        adminService.getHostelStats()
+      ]);
+
+      if (blocksRes.success && blocksRes.data) {
+        setBlocks(blocksRes.data);
+      }
+
+      if (statsRes.success && statsRes.data) {
+        setStats({
+          totalBlocks: statsRes.data.totalBlocks || blocksRes.data?.length || 0,
+          totalRooms: statsRes.data.totalRooms || 0,
+          occupiedRooms: statsRes.data.occupiedRooms || 0,
+          availableRooms: statsRes.data.availableRooms || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching hostel data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalRooms = stats.totalRooms || blocks.reduce((sum, block) => sum + (block.totalRooms || 0), 0);
 
   // Block Functions
-  const handleAddBlock = (e) => {
+  const handleAddBlock = async (e) => {
     e.preventDefault();
-    const totalRooms = parseInt(blockForm.floors) * parseInt(blockForm.roomsPerFloor);
-    if (editingBlock) {
-      setBlocks(blocks.map(b => b.id === editingBlock.id ? {
-        ...b,
+    try {
+      setLoading(true);
+      const totalRooms = parseInt(blockForm.floors) * parseInt(blockForm.roomsPerFloor);
+      const blockData = {
         ...blockForm,
-        totalRooms,
-        floors: parseInt(blockForm.floors),
-        roomsPerFloor: parseInt(blockForm.roomsPerFloor)
-      } : b));
-      alert('Block updated successfully!');
-    } else {
-      const newBlock = {
-        id: blocks.length + 1,
-        ...blockForm,
-        totalRooms,
         floors: parseInt(blockForm.floors),
         roomsPerFloor: parseInt(blockForm.roomsPerFloor),
-        warden: 'Unassigned',
-        wardenId: null
+        totalRooms
       };
-      setBlocks([...blocks, newBlock]);
-      alert('Block added successfully!');
+
+      if (editingBlock) {
+        const response = await adminService.updateHostelBlock(editingBlock._id || editingBlock.id, blockData);
+        if (response.success) {
+          alert('Block updated successfully!');
+          await fetchHostelData();
+        }
+      } else {
+        const response = await adminService.createHostelBlock(blockData);
+        if (response.success) {
+          alert('Block added successfully!');
+          await fetchHostelData();
+        }
+      }
+      setShowBlockModal(false);
+      setEditingBlock(null);
+      setBlockForm({ name: '', type: 'boys', floors: '', roomsPerFloor: '', warden: '' });
+    } catch (error) {
+      console.error('Error saving block:', error);
+      alert('Error saving block. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setShowBlockModal(false);
-    setEditingBlock(null);
-    setBlockForm({ name: '', type: 'boys', floors: '', roomsPerFloor: '' });
   };
 
   const openEditBlock = (block) => {
@@ -88,15 +120,28 @@ const HostelManagement = () => {
     setBlockForm({
       name: block.name,
       type: block.type,
-      floors: block.floors.toString(),
-      roomsPerFloor: block.roomsPerFloor.toString()
+      floors: block.floors?.toString() || '',
+      roomsPerFloor: block.roomsPerFloor?.toString() || '',
+      warden: block.warden || ''
     });
     setShowBlockModal(true);
   };
 
-  const deleteBlock = (id) => {
+  const deleteBlock = async (id) => {
     if (window.confirm('Are you sure you want to delete this block?')) {
-      setBlocks(blocks.filter(b => b.id !== id));
+      try {
+        setLoading(true);
+        const response = await adminService.deleteHostelBlock(id);
+        if (response.success) {
+          alert('Block deleted successfully!');
+          await fetchHostelData();
+        }
+      } catch (error) {
+        console.error('Error deleting block:', error);
+        alert('Error deleting block. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -135,6 +180,17 @@ const HostelManagement = () => {
     setWardenAssignForm({ wardenId: '', blockId: '' });
   };
 
+  if (loading && blocks.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading hostel data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -148,7 +204,7 @@ const HostelManagement = () => {
       </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -158,7 +214,7 @@ const HostelManagement = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Blocks</p>
-              <p className="text-3xl font-bold text-gray-900">{blocks.length}</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.totalBlocks}</p>
             </div>
             <div className="p-3 bg-indigo-100 rounded-lg">
               <Building2 className="w-6 h-6 text-indigo-600" />
@@ -191,12 +247,28 @@ const HostelManagement = () => {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Wardens</p>
-              <p className="text-3xl font-bold text-gray-900">{wardens.length}</p>
-              <p className="text-xs text-gray-500 mt-1">{wardens.filter(w => w.assignedBlock !== 'Unassigned').length} assigned</p>
+              <p className="text-sm text-gray-600">Occupied</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.occupiedRooms}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-lg">
               <UserCheck className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Available</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.availableRooms}</p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
           </div>
         </motion.div>
@@ -262,7 +334,7 @@ const HostelManagement = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {blocks.map((block) => (
-                    <tr key={block.id} className="hover:bg-gray-50">
+                    <tr key={block._id || block.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{block.name}</td>
                       <td className="px-6 py-4 text-center">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -271,20 +343,22 @@ const HostelManagement = () => {
                           {block.type}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 text-center">{block.floors}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 text-center">{block.totalRooms}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{block.warden}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 text-center">{block.floors || 0}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 text-center">{block.totalRooms || 0}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{block.warden || 'Unassigned'}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center space-x-2">
                           <button
                             onClick={() => openEditBlock(block)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => deleteBlock(block.id)}
+                            onClick={() => deleteBlock(block._id || block.id)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -292,6 +366,15 @@ const HostelManagement = () => {
                       </td>
                     </tr>
                   ))}
+                  {blocks.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-12 text-center">
+                        <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500">No hostel blocks found</p>
+                        <p className="text-gray-400 text-sm mt-1">Click "Add Block" to create one</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
