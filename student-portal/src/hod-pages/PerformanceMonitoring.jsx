@@ -1,14 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, BarChart3, Users, Award, AlertTriangle,
   Calendar, BookOpen, Target, Filter
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function PerformanceMonitoring() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [viewType, setViewType] = useState('classwise');
-  const { performanceData } = hodData;
+  const [performanceData, setPerformanceData] = useState({
+    classWise: [],
+    subjectWise: []
+  });
+
+  useEffect(() => {
+    fetchPerformanceData();
+  }, []);
+
+  const fetchPerformanceData = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getPerformanceMetrics(user?.department);
+
+      if (response.success && response.data) {
+        setPerformanceData({
+          classWise: response.data.classWise || [],
+          subjectWise: response.data.subjectWise || []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching performance data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPerformanceColor = (percentage) => {
     if (percentage >= 80) return 'text-green-600 bg-green-50';
@@ -22,10 +50,20 @@ function PerformanceMonitoring() {
     return 'bg-red-500';
   };
 
-  const totalStudents = performanceData.classWise.reduce((sum, cls) => sum + cls.students, 0);
-  const totalToppers = performanceData.classWise.reduce((sum, cls) => sum + cls.toppers, 0);
-  const totalNeedsAttention = performanceData.classWise.reduce((sum, cls) => sum + cls.needsAttention, 0);
-  const avgPerformance = (performanceData.classWise.reduce((sum, cls) => sum + cls.avgPercentage, 0) / performanceData.classWise.length).toFixed(1);
+  const totalStudents = performanceData.classWise.reduce((sum, cls) => sum + (cls.students || 0), 0);
+  const totalToppers = performanceData.classWise.reduce((sum, cls) => sum + (cls.toppers || 0), 0);
+  const totalNeedsAttention = performanceData.classWise.reduce((sum, cls) => sum + (cls.needsAttention || 0), 0);
+  const avgPerformance = performanceData.classWise.length > 0
+    ? (performanceData.classWise.reduce((sum, cls) => sum + (cls.avgPercentage || 0), 0) / performanceData.classWise.length).toFixed(1)
+    : 0;
+
+  if (loading && performanceData.classWise.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

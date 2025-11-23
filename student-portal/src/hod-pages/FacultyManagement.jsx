@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Plus, Search, Filter, Eye, Edit, Mail,
   Phone, Award, BookOpen, Calendar, X, UserPlus
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function FacultyManagement() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [faculty, setFaculty] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedFaculty, setSelectedFaculty] = useState(null);
@@ -17,6 +21,25 @@ function FacultyManagement() {
     classes: []
   });
 
+  useEffect(() => {
+    fetchFaculty();
+  }, []);
+
+  const fetchFaculty = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getFaculty({ department: user?.department });
+
+      if (response.success && response.data) {
+        setFaculty(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching faculty:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const availableSubjects = [
     'Data Structures', 'Algorithms', 'Database Management', 'SQL',
     'Operating Systems', 'Linux', 'Computer Networks', 'Network Security',
@@ -25,13 +48,13 @@ function FacultyManagement() {
 
   const availableClasses = ['CSE-2A', 'CSE-2B', 'CSE-3A', 'CSE-3B', 'CSE-4A', 'CSE-4B'];
 
-  const filteredFaculty = hodData.facultyList.filter(faculty => {
+  const filteredFaculty = faculty.filter(facultyMember => {
     const matchesSearch =
-      faculty.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faculty.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faculty.subjects.some(sub => sub.toLowerCase().includes(searchQuery.toLowerCase()));
+      facultyMember.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (facultyMember.employeeId || facultyMember.id)?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      facultyMember.subjects?.some(sub => sub.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesStatus = statusFilter === 'all' || faculty.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || facultyMember.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -65,7 +88,7 @@ function FacultyManagement() {
     setShowAssignModal(true);
   };
 
-  const handleSubmitAssignment = (e) => {
+  const handleSubmitAssignment = async (e) => {
     e.preventDefault();
     if (assignmentData.subjects.length === 0) {
       alert('Please select at least one subject');
@@ -75,8 +98,27 @@ function FacultyManagement() {
       alert('Please select at least one class');
       return;
     }
-    alert(`Successfully assigned ${assignmentData.subjects.length} subject(s) and ${assignmentData.classes.length} class(es) to ${selectedFaculty.name}`);
-    setShowAssignModal(false);
+
+    try {
+      setLoading(true);
+      const facultyId = selectedFaculty._id || selectedFaculty.id;
+
+      const response = await hodService.updateFaculty(facultyId, {
+        subjects: assignmentData.subjects,
+        classes: assignmentData.classes
+      });
+
+      if (response.success) {
+        alert(`Successfully assigned ${assignmentData.subjects.length} subject(s) and ${assignmentData.classes.length} class(es) to ${selectedFaculty.name}`);
+        setShowAssignModal(false);
+        await fetchFaculty(); // Refresh faculty list
+      }
+    } catch (error) {
+      console.error('Error assigning subjects/classes:', error);
+      alert('An error occurred while updating faculty assignment');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleSubject = (subject) => {
@@ -96,6 +138,14 @@ function FacultyManagement() {
         : [...prev.classes, cls]
     }));
   };
+
+  if (loading && faculty.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -175,14 +225,14 @@ function FacultyManagement() {
             <tbody className="divide-y divide-gray-200">
               {filteredFaculty.map((faculty, index) => (
                 <motion.tr
-                  key={faculty.id}
+                  key={faculty._id || faculty.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: index * 0.05 }}
                   className="hover:bg-gray-50"
                 >
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {faculty.id}
+                    {faculty.employeeId || faculty.id}
                   </td>
                   <td className="px-6 py-4">
                     <div>
@@ -195,24 +245,28 @@ function FacultyManagement() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
-                      {faculty.subjects.map((subject, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
-                        >
-                          {subject}
-                        </span>
-                      ))}
+                      {faculty.subjects && faculty.subjects.length > 0 ? (
+                        faculty.subjects.map((subject, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
+                          >
+                            {subject}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-400">No subjects assigned</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getWorkloadColor(faculty.workload)}`}>
-                      {faculty.workload} hrs
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getWorkloadColor(faculty.workload || 0)}`}>
+                      {faculty.workload || 0} hrs
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(faculty.status)}`}>
-                      {faculty.status === 'on-leave' ? 'On Leave' : faculty.status.charAt(0).toUpperCase() + faculty.status.slice(1)}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(faculty.status || 'present')}`}>
+                      {faculty.status === 'on-leave' ? 'On Leave' : (faculty.status || 'present').charAt(0).toUpperCase() + (faculty.status || 'present').slice(1)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -243,7 +297,7 @@ function FacultyManagement() {
         <div className="md:hidden divide-y divide-gray-200">
           {filteredFaculty.map((faculty, index) => (
             <motion.div
-              key={faculty.id}
+              key={faculty._id || faculty.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: index * 0.05 }}
@@ -252,27 +306,31 @@ function FacultyManagement() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-bold text-gray-900">{faculty.name}</h3>
-                  <p className="text-sm text-gray-600">{faculty.id}</p>
+                  <p className="text-sm text-gray-600">{faculty.employeeId || faculty.id}</p>
                   <p className="text-sm text-gray-600">{faculty.designation}</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(faculty.status)}`}>
-                  {faculty.status === 'on-leave' ? 'On Leave' : faculty.status.charAt(0).toUpperCase() + faculty.status.slice(1)}
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(faculty.status || 'present')}`}>
+                  {faculty.status === 'on-leave' ? 'On Leave' : (faculty.status || 'present').charAt(0).toUpperCase() + (faculty.status || 'present').slice(1)}
                 </span>
               </div>
               <div className="space-y-2 mb-3">
                 <div className="flex flex-wrap gap-1">
-                  {faculty.subjects.map((subject, i) => (
-                    <span
-                      key={i}
-                      className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
-                    >
-                      {subject}
-                    </span>
-                  ))}
+                  {faculty.subjects && faculty.subjects.length > 0 ? (
+                    faculty.subjects.map((subject, i) => (
+                      <span
+                        key={i}
+                        className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
+                      >
+                        {subject}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400">No subjects assigned</span>
+                  )}
                 </div>
                 <p className="text-sm text-gray-600">
-                  Workload: <span className={`font-semibold ${getWorkloadColor(faculty.workload).split(' ')[0]}`}>
-                    {faculty.workload} hours
+                  Workload: <span className={`font-semibold ${getWorkloadColor(faculty.workload || 0).split(' ')[0]}`}>
+                    {faculty.workload || 0} hours
                   </span>
                 </p>
               </div>
@@ -331,19 +389,19 @@ function FacultyManagement() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-600">Employee ID</p>
-                      <p className="font-semibold text-gray-900">{selectedFaculty.id}</p>
+                      <p className="font-semibold text-gray-900">{selectedFaculty.employeeId || selectedFaculty.id}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Designation</p>
-                      <p className="font-semibold text-gray-900">{selectedFaculty.designation}</p>
+                      <p className="font-semibold text-gray-900">{selectedFaculty.designation || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Qualification</p>
-                      <p className="font-semibold text-gray-900">{selectedFaculty.qualification}</p>
+                      <p className="font-semibold text-gray-900">{selectedFaculty.qualification || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Experience</p>
-                      <p className="font-semibold text-gray-900">{selectedFaculty.experience}</p>
+                      <p className="font-semibold text-gray-900">{selectedFaculty.experience || 'N/A'}</p>
                     </div>
                   </div>
                   <div>
@@ -362,33 +420,41 @@ function FacultyManagement() {
                   <div>
                     <p className="text-sm text-gray-600 mb-2">Assigned Subjects</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedFaculty.subjects.map((subject, i) => (
-                        <span
-                          key={i}
-                          className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg font-medium"
-                        >
-                          {subject}
-                        </span>
-                      ))}
+                      {selectedFaculty.subjects && selectedFaculty.subjects.length > 0 ? (
+                        selectedFaculty.subjects.map((subject, i) => (
+                          <span
+                            key={i}
+                            className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg font-medium"
+                          >
+                            {subject}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-400">No subjects assigned</span>
+                      )}
                     </div>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-2">Assigned Classes</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedFaculty.classes.map((cls, i) => (
-                        <span
-                          key={i}
-                          className="px-3 py-1 bg-purple-50 text-purple-700 rounded-lg font-medium"
-                        >
-                          {cls}
-                        </span>
-                      ))}
+                      {selectedFaculty.classes && selectedFaculty.classes.length > 0 ? (
+                        selectedFaculty.classes.map((cls, i) => (
+                          <span
+                            key={i}
+                            className="px-3 py-1 bg-purple-50 text-purple-700 rounded-lg font-medium"
+                          >
+                            {cls}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-400">No classes assigned</span>
+                      )}
                     </div>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Workload</p>
-                    <p className={`text-lg font-bold ${getWorkloadColor(selectedFaculty.workload).split(' ')[0]}`}>
-                      {selectedFaculty.workload} hours/week
+                    <p className={`text-lg font-bold ${getWorkloadColor(selectedFaculty.workload || 0).split(' ')[0]}`}>
+                      {selectedFaculty.workload || 0} hours/week
                     </p>
                   </div>
                 </div>

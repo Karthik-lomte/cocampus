@@ -1,19 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Clock, User, Calendar, Phone,
   AlertCircle, X, FileText, TrendingUp
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function GatePassApproval() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [gatePassRequests, setGatePassRequests] = useState([]);
+  const [stats, setStats] = useState({
+    pending: 0,
+    approvedToday: 0,
+    total: 0
+  });
   const [selectedPass, setSelectedPass] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
   const [remarks, setRemarks] = useState('');
   const [filter, setFilter] = useState('pending');
 
-  const gatePassRequests = hodData.gatePassRequests;
+  useEffect(() => {
+    fetchGatePasses();
+    fetchStats();
+  }, []);
+
+  const fetchGatePasses = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getGatePasses({ department: user?.department });
+
+      if (response.success && response.data) {
+        setGatePassRequests(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching gate passes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await hodService.getGatePassStats(user?.department);
+
+      if (response.success && response.data) {
+        setStats({
+          pending: response.data.pending || 0,
+          approvedToday: response.data.approvedToday || 0,
+          total: response.data.total || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching gate pass stats:', error);
+    }
+  };
 
   const filteredRequests = gatePassRequests.filter(req => {
     if (filter === 'all') return true;
@@ -32,15 +75,39 @@ function GatePassApproval() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
       alert('Please provide remarks for rejection');
       return;
     }
-    alert(`Gate pass ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setLoading(true);
+      const passId = selectedPass._id || selectedPass.id;
+
+      if (approvalAction === 'approve') {
+        const response = await hodService.approveGatePass(passId, remarks);
+        if (response.success) {
+          alert('Gate pass approved successfully!');
+          await Promise.all([fetchGatePasses(), fetchStats()]);
+        }
+      } else if (approvalAction === 'reject') {
+        const response = await hodService.rejectGatePass(passId, remarks);
+        if (response.success) {
+          alert('Gate pass rejected successfully!');
+          await Promise.all([fetchGatePasses(), fetchStats()]);
+        }
+      }
+
+      setShowApprovalModal(false);
+      setRemarks('');
+    } catch (error) {
+      console.error('Error submitting decision:', error);
+      alert('An error occurred while processing the request');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getAttendanceColor = (percentage) => {
@@ -48,6 +115,14 @@ function GatePassApproval() {
     if (percentage >= 75) return 'text-orange-600 bg-orange-50';
     return 'text-red-600 bg-red-50';
   };
+
+  if (loading && gatePassRequests.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -76,7 +151,7 @@ function GatePassApproval() {
             <div>
               <p className="text-orange-100 text-sm">Pending Requests</p>
               <p className="text-4xl font-bold mt-2">
-                {gatePassRequests.filter(r => r.status === 'pending').length}
+                {stats.pending}
               </p>
             </div>
             <Clock size={48} className="text-orange-200" />
@@ -92,7 +167,7 @@ function GatePassApproval() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Approved Today</p>
-              <p className="text-4xl font-bold mt-2">12</p>
+              <p className="text-4xl font-bold mt-2">{stats.approvedToday}</p>
             </div>
             <CheckCircle size={48} className="text-green-200" />
           </div>
@@ -107,7 +182,7 @@ function GatePassApproval() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Requests</p>
-              <p className="text-4xl font-bold mt-2">{gatePassRequests.length}</p>
+              <p className="text-4xl font-bold mt-2">{stats.total}</p>
             </div>
             <FileText size={48} className="text-blue-200" />
           </div>

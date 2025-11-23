@@ -59,17 +59,30 @@ function DepartmentManagement() {
 
       if (deptsRes.success && deptsRes.data) {
         // Transform department data for display
-        const deptList = deptsRes.data.map(dept => ({
-          _id: dept._id,
-          id: dept._id,
-          name: dept.name || dept.departmentName,
-          code: dept.code || dept.departmentCode || 'N/A',
-          hod: dept.hod || dept.hodName || null,
-          status: dept.hod || dept.hodName ? 'assigned' : 'vacant',
-          facultyCount: dept.facultyCount || 0,
-          studentCount: dept.studentCount || 0,
-          performanceScore: dept.performance || dept.performanceScore || Math.floor(Math.random() * 20) + 75
-        }));
+        const deptList = deptsRes.data.map(dept => {
+          // Check if HOD is populated (object) or just a reference (string/null)
+          const hodData = dept.hod && typeof dept.hod === 'object' ? dept.hod : null;
+
+          return {
+            _id: dept._id,
+            id: dept._id,
+            name: dept.name || dept.departmentName,
+            code: dept.code || dept.departmentCode || 'N/A',
+            hod: hodData,
+            hodName: hodData ? hodData.name : (dept.hodName || 'Not Assigned'),
+            hodEmail: hodData ? hodData.email : '',
+            hodPhone: hodData ? hodData.phone : '',
+            hodEmployeeId: hodData ? hodData.employeeId : '',
+            status: hodData ? 'assigned' : 'vacant',
+            facultyCount: dept.facultyCount || 0,
+            studentCount: dept.studentCount || 0,
+            performanceScore: dept.performance || dept.performanceScore || Math.floor(Math.random() * 20) + 75,
+            email: dept.email || '',
+            phone: dept.phone || '',
+            location: dept.location || '',
+            yearEstablished: dept.yearEstablished || 'N/A'
+          };
+        });
 
         setDepartments(deptList);
 
@@ -346,7 +359,7 @@ function DepartmentManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
                     <div className="text-gray-600">
                       <Users size={16} className="inline mr-2 text-purple-600" />
-                      <strong>HOD:</strong> {department.hod || 'Not Assigned'}
+                      <strong>HOD:</strong> {department.hodName}
                     </div>
                     <div className="text-gray-600">
                       <Users size={16} className="inline mr-2 text-blue-600" />

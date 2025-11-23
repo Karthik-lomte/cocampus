@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, Download, Search, Trophy, Award, Medal,
   Calendar, User, X, FileText, Users, GraduationCap
 } from 'lucide-react';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function AchievementsManagement() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterType, setFilterType] = useState('all'); // 'all', 'student', 'faculty'
+  const [achievements, setAchievements] = useState([]);
   const [uploadData, setUploadData] = useState({
     type: 'student', // 'student' or 'faculty'
     name: '',
@@ -21,8 +26,27 @@ function AchievementsManagement() {
     certificate: null
   });
 
-  // Mock achievements data
-  const [achievements] = useState([
+  useEffect(() => {
+    fetchAchievements();
+  }, []);
+
+  const fetchAchievements = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getAchievements({ department: user?.department });
+
+      if (response.success && response.data) {
+        setAchievements(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Keeping original mock data as fallback for now
+  const mockAchievements = [
     // Student Achievements
     {
       id: 1,
@@ -122,20 +146,38 @@ function AchievementsManagement() {
     return matchesSearch && matchesCategory && matchesType;
   });
 
-  const handleUploadSubmit = (e) => {
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    alert(`Achievement uploaded successfully for ${uploadData.name}!`);
-    setShowUploadModal(false);
-    setUploadData({
-      type: 'student',
-      name: '',
-      rollNoOrId: '',
-      category: '',
-      title: '',
-      description: '',
-      date: '',
-      certificate: null
-    });
+
+    try {
+      setLoading(true);
+      const response = await hodService.createAchievement({
+        ...uploadData,
+        department: user?.department,
+        uploadedBy: user?.name
+      });
+
+      if (response.success) {
+        alert(`Achievement uploaded successfully for ${uploadData.name}!`);
+        setShowUploadModal(false);
+        setUploadData({
+          type: 'student',
+          name: '',
+          rollNoOrId: '',
+          category: '',
+          title: '',
+          description: '',
+          date: '',
+          certificate: null
+        });
+        await fetchAchievements(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error uploading achievement:', error);
+      alert('An error occurred while uploading the achievement');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDownload = (achievement) => {
@@ -174,6 +216,14 @@ function AchievementsManagement() {
 
   const studentAchievements = achievements.filter(a => a.type === 'student');
   const facultyAchievements = achievements.filter(a => a.type === 'faculty');
+
+  if (loading && achievements.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
