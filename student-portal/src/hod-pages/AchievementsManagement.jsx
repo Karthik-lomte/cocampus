@@ -127,7 +127,7 @@ function AchievementsManagement() {
       uploadedBy: 'Dr. Rajesh Kumar (HOD)',
       uploadDate: '2024-01-18'
     }
-  ]);
+  ];
 
   const studentCategories = ['Technical', 'Sports', 'Cultural', 'Academic', 'Other'];
   const facultyCategories = ['Research', 'Publication', 'Award', 'Training', 'Other'];
