@@ -1,14 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, GraduationCap, Clock, Award, TrendingUp,
   FileText, CheckCircle, AlertCircle, Calendar,
   BarChart3, UserCheck, Settings
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function HoDDashboard() {
-  const { profile, departmentStats, recentActivities } = hodData;
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [departmentStats, setDepartmentStats] = useState({
+    totalFaculty: 0,
+    presentToday: 0,
+    totalStudents: 0,
+    sectionsCount: 0,
+    pendingApprovals: 0,
+    leaveRequests: 0,
+    gatePasses: 0,
+    departmentRating: 0
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [profile, setProfile] = useState({
+    name: user?.name || 'HOD',
+    designation: 'Head of Department',
+    department: user?.department || 'Department',
+    avatar: user?.avatar || 'https://via.placeholder.com/150'
+  });
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      const [dashboardRes, activitiesRes] = await Promise.all([
+        hodService.getHoDDashboardStats(),
+        hodService.getRecentActivities(user?.department, 10)
+      ]);
+
+      if (dashboardRes.success && dashboardRes.data) {
+        setDepartmentStats({
+          totalFaculty: dashboardRes.data.totalFaculty || 0,
+          presentToday: dashboardRes.data.presentToday || 0,
+          totalStudents: dashboardRes.data.totalStudents || 0,
+          sectionsCount: dashboardRes.data.sectionsCount || 0,
+          pendingApprovals: dashboardRes.data.pendingApprovals || 0,
+          leaveRequests: dashboardRes.data.leaveRequests || 0,
+          gatePasses: dashboardRes.data.gatePasses || 0,
+          departmentRating: dashboardRes.data.departmentRating || 0
+        });
+      }
+
+      if (activitiesRes.success && activitiesRes.data) {
+        setRecentActivities(activitiesRes.data);
+      }
+    } catch (error) {
+      console.error('Error fetching HOD dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stats = [
     {
@@ -94,6 +149,14 @@ function HoDDashboard() {
     };
     return icons[type] || AlertCircle;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

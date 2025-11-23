@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText, CheckCircle, XCircle, Clock, User, Calendar,
   Mail, Phone, FileCheck, AlertCircle, X, MessageSquare, Plus, Upload
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function LeaveApproval() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [leaveRequests, setLeaveRequests] = useState([]);
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
@@ -22,7 +26,24 @@ function LeaveApproval() {
     documents: null
   });
 
-  const leaveRequests = hodData.leaveRequests;
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, []);
+
+  const fetchLeaveRequests = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getLeaves({ department: user?.department });
+
+      if (response.success && response.data) {
+        setLeaveRequests(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching leave requests:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredRequests = leaveRequests.filter(req => {
     if (filter === 'all') return true;
@@ -41,34 +62,82 @@ function LeaveApproval() {
     setShowApprovalModal(true);
   };
 
-  const handleSubmitDecision = (e) => {
+  const handleSubmitDecision = async (e) => {
     e.preventDefault();
     if (approvalAction === 'reject' && !remarks) {
       alert('Please provide remarks for rejection');
       return;
     }
-    alert(`Leave request ${approvalAction}d successfully!`);
-    setShowApprovalModal(false);
-    setRemarks('');
+
+    try {
+      setLoading(true);
+      const leaveId = selectedLeave._id || selectedLeave.id;
+
+      if (approvalAction === 'approve') {
+        const response = await hodService.approveLeave(leaveId, remarks);
+        if (response.success) {
+          alert('Leave request approved successfully!');
+          await fetchLeaveRequests();
+        } else {
+          alert('Failed to approve leave: ' + (response.message || 'Unknown error'));
+        }
+      } else if (approvalAction === 'reject') {
+        const response = await hodService.rejectLeave(leaveId, remarks);
+        if (response.success) {
+          alert('Leave request rejected successfully!');
+          await fetchLeaveRequests();
+        } else {
+          alert('Failed to reject leave: ' + (response.message || 'Unknown error'));
+        }
+      }
+
+      setShowApprovalModal(false);
+      setRemarks('');
+    } catch (error) {
+      console.error('Error submitting decision:', error);
+      alert('An error occurred while processing the request');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
     // Calculate number of days
     const fromDate = new Date(leaveFormData.fromDate);
     const toDate = new Date(leaveFormData.toDate);
     const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
 
-    alert(`Leave application submitted to Principal successfully!\nDuration: ${days} days`);
-    setShowApplyLeaveModal(false);
-    setLeaveFormData({
-      leaveType: '',
-      fromDate: '',
-      toDate: '',
-      reason: '',
-      substituteArranged: '',
-      documents: null
-    });
+    try {
+      setLoading(true);
+      // Create leave request (HOD applies to Principal)
+      const response = await hodService.createLeave({
+        ...leaveFormData,
+        days,
+        appliedBy: user?._id,
+        department: user?.department
+      });
+
+      if (response.success) {
+        alert(`Leave application submitted to Principal successfully!\nDuration: ${days} days`);
+        setShowApplyLeaveModal(false);
+        setLeaveFormData({
+          leaveType: '',
+          fromDate: '',
+          toDate: '',
+          reason: '',
+          substituteArranged: '',
+          documents: null
+        });
+      } else {
+        alert('Failed to submit leave: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error applying for leave:', error);
+      alert('An error occurred while submitting leave');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getLeaveTypeColor = (type) => {
@@ -80,6 +149,14 @@ function LeaveApproval() {
     };
     return colors[type] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
+
+  if (loading && leaveRequests.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
