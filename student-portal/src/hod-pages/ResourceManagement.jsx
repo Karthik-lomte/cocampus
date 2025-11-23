@@ -1,17 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Server, Monitor, Wrench, DollarSign, TrendingUp,
   AlertCircle, CheckCircle, Settings, Package, Edit2, X
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import hodService from '../api/hodService';
+import { useAuth } from '../context/AuthContext';
 
 function ResourceManagement() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [viewType, setViewType] = useState('labs');
-  const { resources } = hodData;
+  const [resources, setResources] = useState({
+    laboratories: [],
+    equipment: [],
+    budgetAllocation: {
+      total: 0,
+      utilized: 0,
+      categories: []
+    }
+  });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editType, setEditType] = useState(''); // 'lab', 'equipment', 'budget'
   const [editData, setEditData] = useState(null);
+
+  useEffect(() => {
+    fetchResources();
+  }, []);
+
+  const fetchResources = async () => {
+    try {
+      setLoading(true);
+      const response = await hodService.getResources({ department: user?.department });
+
+      if (response.success && response.data) {
+        setResources(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching resources:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     const colors = {
@@ -32,11 +62,13 @@ function ResourceManagement() {
     return Icon;
   };
 
-  const totalSystems = resources.laboratories.reduce((sum, lab) => sum + lab.systems, 0);
-  const functionalSystems = resources.laboratories.reduce((sum, lab) => sum + lab.functional, 0);
-  const functionalPercentage = ((functionalSystems / totalSystems) * 100).toFixed(1);
+  const totalSystems = resources.laboratories.reduce((sum, lab) => sum + (lab.systems || 0), 0);
+  const functionalSystems = resources.laboratories.reduce((sum, lab) => sum + (lab.functional || 0), 0);
+  const functionalPercentage = totalSystems > 0 ? ((functionalSystems / totalSystems) * 100).toFixed(1) : 0;
 
-  const budgetUtilizedPercentage = ((resources.budgetAllocation.utilized / resources.budgetAllocation.total) * 100).toFixed(1);
+  const budgetUtilizedPercentage = resources.budgetAllocation.total > 0
+    ? ((resources.budgetAllocation.utilized / resources.budgetAllocation.total) * 100).toFixed(1)
+    : 0;
 
   const handleEditLab = (lab) => {
     setEditType('lab');
@@ -59,11 +91,30 @@ function ResourceManagement() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
-    alert(`${editType.charAt(0).toUpperCase() + editType.slice(1)} updated successfully!`);
-    setShowEditModal(false);
-    setEditData(null);
+
+    try {
+      setLoading(true);
+      const resourceId = editData._id || editData.id;
+
+      const response = await hodService.updateResource(resourceId, {
+        ...editData,
+        department: user?.department
+      });
+
+      if (response.success) {
+        alert(`${editType.charAt(0).toUpperCase() + editType.slice(1)} updated successfully!`);
+        setShowEditModal(false);
+        setEditData(null);
+        await fetchResources(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error updating resource:', error);
+      alert('An error occurred while updating the resource');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditFieldChange = (field, value) => {
@@ -72,6 +123,14 @@ function ResourceManagement() {
       [field]: value
     }));
   };
+
+  if (loading && resources.laboratories.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

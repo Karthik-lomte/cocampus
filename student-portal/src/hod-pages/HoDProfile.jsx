@@ -3,10 +3,24 @@ import {
   User, Mail, Phone, Calendar, Award, BookOpen,
   Building, MapPin, Clock, GraduationCap
 } from 'lucide-react';
-import { hodData } from '../hod-data/hodData';
+import { useAuth } from '../context/AuthContext';
 
 function HoDProfile() {
-  const { profile } = hodData;
+  const { user } = useAuth();
+
+  const profile = {
+    name: user?.name || 'HOD Name',
+    email: user?.email || 'hod@example.com',
+    phone: user?.phone || 'N/A',
+    designation: 'Head of Department',
+    department: user?.department || 'Department',
+    qualification: user?.qualification || 'N/A',
+    experience: user?.experience || 'N/A',
+    employeeId: user?.employeeId || user?.id || 'N/A',
+    joinDate: user?.joinDate || user?.createdAt || new Date(),
+    officeRoom: user?.officeRoom || 'N/A',
+    avatar: user?.avatar || 'https://via.placeholder.com/150'
+  };
 
   const infoCards = [
     {
