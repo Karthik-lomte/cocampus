@@ -6,7 +6,7 @@ import User from '../models/User.js';
 // @access  Private
 export const getDepartments = async (req, res) => {
   try {
-    const departments = await Department.find().populate('hod', 'name email');
+    const departments = await Department.find().populate('hod', 'name email phone employeeId department role');
 
     res.status(200).json({
       success: true,
@@ -27,7 +27,7 @@ export const getDepartments = async (req, res) => {
 // @access  Private
 export const getDepartment = async (req, res) => {
   try {
-    const department = await Department.findById(req.params.id).populate('hod', 'name email phone');
+    const department = await Department.findById(req.params.id).populate('hod', 'name email phone employeeId department role');
 
     if (!department) {
       return res.status(404).json({

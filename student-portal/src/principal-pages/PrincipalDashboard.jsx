@@ -249,7 +249,7 @@ function PrincipalDashboard() {
               <h4 className="font-semibold text-gray-900 mb-2">{dept.name}</h4>
               <div className="space-y-1 text-sm text-gray-600">
                 <p>Code: <span className="font-medium">{dept.code}</span></p>
-                <p>HOD: <span className="font-medium">{dept.hod || 'Not Assigned'}</span></p>
+                <p>HOD: <span className="font-medium">{dept.hod && typeof dept.hod === 'object' ? dept.hod.name : (dept.hodName || 'Not Assigned')}</span></p>
                 <p>Faculty: <span className="font-medium">{dept.facultyCount || 0}</span></p>
                 <p>Students: <span className="font-medium">{dept.studentCount || 0}</span></p>
               </div>
