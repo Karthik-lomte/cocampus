@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
@@ -20,37 +20,24 @@ import {
   Activity,
   Timer
 } from 'lucide-react';
+import adminService from '../api/adminService';
 
 const SportsManagement = () => {
-  // Facilities State
-  const [facilities, setFacilities] = useState([
-    { id: 1, name: 'Indoor Badminton Court', location: 'Sports Complex - Block A', capacity: 4, pricePerHour: 200, status: 'available', type: 'indoor' },
-    { id: 2, name: 'Tennis Court', location: 'Main Ground', capacity: 4, pricePerHour: 300, status: 'available', type: 'outdoor' },
-    { id: 3, name: 'Cricket Ground', location: 'Sports Field', capacity: 22, pricePerHour: 500, status: 'maintenance', type: 'outdoor' },
-    { id: 4, name: 'Basketball Court', location: 'Sports Complex - Block B', capacity: 10, pricePerHour: 250, status: 'available', type: 'indoor' },
-    { id: 5, name: 'Swimming Pool', location: 'Aquatic Center', capacity: 20, pricePerHour: 150, status: 'available', type: 'indoor' },
-    { id: 6, name: 'Football Field', location: 'Main Ground', capacity: 22, pricePerHour: 600, status: 'available', type: 'outdoor' },
-    { id: 7, name: 'Table Tennis Room', location: 'Sports Complex - Block C', capacity: 8, pricePerHour: 100, status: 'available', type: 'indoor' },
-    { id: 8, name: 'Gym & Fitness Center', location: 'Sports Complex - Block A', capacity: 30, pricePerHour: 50, status: 'available', type: 'indoor' }
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [facilities, setFacilities] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [stats, setStats] = useState({
+    totalFacilities: 0,
+    totalBookings: 0,
+    pendingApprovals: 0,
+    totalRevenue: 0
+  });
 
-  // Bookings State
-  const [bookings, setBookings] = useState([
-    { id: 1, facilityId: 1, facilityName: 'Indoor Badminton Court', studentName: 'Rahul Sharma', studentId: 'CSE2022001', date: '2024-11-25', startTime: '09:00', endTime: '11:00', duration: 2, amount: 400, status: 'pending', requestDate: '2024-11-20' },
-    { id: 2, facilityId: 2, facilityName: 'Tennis Court', studentName: 'Priya Patel', studentId: 'CSE2022002', date: '2024-11-26', startTime: '14:00', endTime: '16:00', duration: 2, amount: 600, status: 'approved', requestDate: '2024-11-19' },
-    { id: 3, facilityId: 4, facilityName: 'Basketball Court', studentName: 'Amit Kumar', studentId: 'ECE2022001', date: '2024-11-25', startTime: '16:00', endTime: '18:00', duration: 2, amount: 500, status: 'pending', requestDate: '2024-11-20' },
-    { id: 4, facilityId: 5, facilityName: 'Swimming Pool', studentName: 'Neha Gupta', studentId: 'ECE2022002', date: '2024-11-24', startTime: '06:00', endTime: '07:00', duration: 1, amount: 150, status: 'approved', requestDate: '2024-11-18' },
-    { id: 5, facilityId: 7, facilityName: 'Table Tennis Room', studentName: 'Vijay Reddy', studentId: 'ME2022001', date: '2024-11-27', startTime: '10:00', endTime: '12:00', duration: 2, amount: 200, status: 'pending', requestDate: '2024-11-21' },
-    { id: 6, facilityId: 1, facilityName: 'Indoor Badminton Court', studentName: 'Anita Singh', studentId: 'CE2022001', date: '2024-11-23', startTime: '15:00', endTime: '17:00', duration: 2, amount: 400, status: 'rejected', requestDate: '2024-11-17', rejectionReason: 'Time slot already booked' }
-  ]);
-
-  // UI State
   const [activeView, setActiveView] = useState('facilities');
   const [searchTerm, setSearchTerm] = useState('');
   const [facilityFilter, setFacilityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Modals State
   const [showFacilityModal, setShowFacilityModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -58,42 +45,83 @@ const SportsManagement = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  // Form Data
   const [facilityForm, setFacilityForm] = useState({
     name: '', location: '', capacity: '', pricePerHour: '', status: 'available', type: 'indoor'
   });
 
-  // Calculate Stats
-  const totalRevenue = bookings
-    .filter(b => b.status === 'approved')
-    .reduce((sum, b) => sum + b.amount, 0);
-  const pendingApprovals = bookings.filter(b => b.status === 'pending').length;
-  const totalBookings = bookings.filter(b => b.status === 'approved').length;
+  useEffect(() => {
+    fetchSportsData();
+  }, []);
+
+  const fetchSportsData = async () => {
+    try {
+      setLoading(true);
+      const [facilitiesRes, bookingsRes, statsRes] = await Promise.all([
+        adminService.getSportsFacilities(),
+        adminService.getSportsBookings(),
+        adminService.getSportsStats()
+      ]);
+
+      if (facilitiesRes.success && facilitiesRes.data) {
+        setFacilities(facilitiesRes.data);
+      }
+
+      if (bookingsRes.success && bookingsRes.data) {
+        setBookings(bookingsRes.data);
+      }
+
+      if (statsRes.success && statsRes.data) {
+        setStats({
+          totalFacilities: statsRes.data.totalFacilities || facilitiesRes.data?.length || 0,
+          totalBookings: statsRes.data.totalBookings || 0,
+          pendingApprovals: statsRes.data.pendingApprovals || 0,
+          totalRevenue: statsRes.data.totalRevenue || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching sports data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalRevenue = stats.totalRevenue || bookings.filter(b => b.status === 'approved').reduce((sum, b) => sum + (b.amount || 0), 0);
+  const pendingApprovals = stats.pendingApprovals || bookings.filter(b => b.status === 'pending').length;
+  const totalBookings = stats.totalBookings || bookings.filter(b => b.status === 'approved').length;
 
   // Facility Functions
-  const handleAddFacility = (e) => {
+  const handleAddFacility = async (e) => {
     e.preventDefault();
-    if (editingFacility) {
-      setFacilities(facilities.map(f => f.id === editingFacility.id ? {
-        ...f,
-        ...facilityForm,
-        capacity: parseInt(facilityForm.capacity),
-        pricePerHour: parseInt(facilityForm.pricePerHour)
-      } : f));
-      alert('Facility updated successfully!');
-    } else {
-      const newFacility = {
-        id: facilities.length + 1,
+    try {
+      setLoading(true);
+      const facilityData = {
         ...facilityForm,
         capacity: parseInt(facilityForm.capacity),
         pricePerHour: parseInt(facilityForm.pricePerHour)
       };
-      setFacilities([...facilities, newFacility]);
-      alert('Facility added successfully!');
+
+      if (editingFacility) {
+        const response = await adminService.updateSportsFacility(editingFacility._id || editingFacility.id, facilityData);
+        if (response.success) {
+          alert('Facility updated successfully!');
+          await fetchSportsData();
+        }
+      } else {
+        const response = await adminService.createSportsFacility(facilityData);
+        if (response.success) {
+          alert('Facility added successfully!');
+          await fetchSportsData();
+        }
+      }
+      setShowFacilityModal(false);
+      setEditingFacility(null);
+      setFacilityForm({ name: '', location: '', capacity: '', pricePerHour: '', status: 'available', type: 'indoor' });
+    } catch (error) {
+      console.error('Error saving facility:', error);
+      alert('Error saving facility. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setShowFacilityModal(false);
-    setEditingFacility(null);
-    setFacilityForm({ name: '', location: '', capacity: '', pricePerHour: '', status: 'available', type: 'indoor' });
   };
 
   const openEditFacility = (facility) => {
@@ -109,42 +137,82 @@ const SportsManagement = () => {
     setShowFacilityModal(true);
   };
 
-  const deleteFacility = (id) => {
+  const deleteFacility = async (id) => {
     if (window.confirm('Are you sure you want to delete this facility?')) {
-      setFacilities(facilities.filter(f => f.id !== id));
+      try {
+        setLoading(true);
+        const response = await adminService.deleteSportsFacility(id);
+        if (response.success) {
+          alert('Facility deleted successfully!');
+          await fetchSportsData();
+        }
+      } catch (error) {
+        console.error('Error deleting facility:', error);
+        alert('Error deleting facility. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const toggleFacilityStatus = (id) => {
-    setFacilities(facilities.map(f => {
-      if (f.id === id) {
-        const newStatus = f.status === 'available' ? 'maintenance' : 'available';
-        return { ...f, status: newStatus };
+  const toggleFacilityStatus = async (id) => {
+    try {
+      setLoading(true);
+      const facility = facilities.find(f => (f._id || f.id) === id);
+      if (!facility) return;
+
+      const newStatus = facility.status === 'available' ? 'maintenance' : 'available';
+      const response = await adminService.updateSportsFacility(id, { ...facility, status: newStatus });
+
+      if (response.success) {
+        await fetchSportsData();
       }
-      return f;
-    }));
+    } catch (error) {
+      console.error('Error updating facility status:', error);
+      alert('Error updating facility status. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Booking Functions
-  const handleApproveBooking = (bookingId) => {
+  const handleApproveBooking = async (bookingId) => {
     if (window.confirm('Approve this booking request?')) {
-      setBookings(bookings.map(b =>
-        b.id === bookingId ? { ...b, status: 'approved' } : b
-      ));
-      alert('Booking approved successfully!');
+      try {
+        setLoading(true);
+        const response = await adminService.approveSportsBooking(bookingId);
+        if (response.success) {
+          alert('Booking approved successfully!');
+          await fetchSportsData();
+        }
+      } catch (error) {
+        console.error('Error approving booking:', error);
+        alert('Error approving booking. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleRejectBooking = (e) => {
+  const handleRejectBooking = async (e) => {
     e.preventDefault();
     if (selectedBooking) {
-      setBookings(bookings.map(b =>
-        b.id === selectedBooking.id ? { ...b, status: 'rejected', rejectionReason } : b
-      ));
-      alert('Booking rejected.');
-      setShowRejectModal(false);
-      setSelectedBooking(null);
-      setRejectionReason('');
+      try {
+        setLoading(true);
+        const response = await adminService.rejectSportsBooking(selectedBooking._id || selectedBooking.id, rejectionReason);
+        if (response.success) {
+          alert('Booking rejected.');
+          await fetchSportsData();
+          setShowRejectModal(false);
+          setSelectedBooking(null);
+          setRejectionReason('');
+        }
+      } catch (error) {
+        console.error('Error rejecting booking:', error);
+        alert('Error rejecting booking. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -179,6 +247,17 @@ const SportsManagement = () => {
       default: return 'gray';
     }
   };
+
+  if (loading && facilities.length === 0 && bookings.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading sports data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -347,7 +426,7 @@ const SportsManagement = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredFacilities.map((facility) => (
-                    <tr key={facility.id} className="hover:bg-gray-50">
+                    <tr key={facility._id || facility.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className="p-2 bg-indigo-100 rounded-lg">
@@ -380,8 +459,9 @@ const SportsManagement = () => {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
-                          onClick={() => toggleFacilityStatus(facility.id)}
+                          onClick={() => toggleFacilityStatus(facility._id || facility.id)}
                           className={`px-3 py-1 rounded-full text-xs font-medium bg-${getStatusColor(facility.status)}-100 text-${getStatusColor(facility.status)}-700 capitalize cursor-pointer hover:opacity-80`}
+                          disabled={loading}
                         >
                           {facility.status}
                         </button>
@@ -391,12 +471,14 @@ const SportsManagement = () => {
                           <button
                             onClick={() => openEditFacility(facility)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => deleteFacility(facility.id)}
+                            onClick={() => deleteFacility(facility._id || facility.id)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -404,6 +486,15 @@ const SportsManagement = () => {
                       </td>
                     </tr>
                   ))}
+                  {filteredFacilities.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-12 text-center">
+                        <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500">No sports facilities found</p>
+                        <p className="text-gray-400 text-sm mt-1">Click "Add Facility" to create one</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -439,7 +530,7 @@ const SportsManagement = () => {
                 >
                   <option value="all">All Facilities</option>
                   {facilities.map(facility => (
-                    <option key={facility.id} value={facility.id}>{facility.name}</option>
+                    <option key={facility._id || facility.id} value={facility._id || facility.id}>{facility.name}</option>
                   ))}
                 </select>
                 <select
@@ -474,7 +565,7 @@ const SportsManagement = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredBookings.map((booking) => (
-                    <tr key={booking.id} className="hover:bg-gray-50">
+                    <tr key={booking._id || booking.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div>
                           <p className="font-medium text-gray-900">{booking.studentName}</p>
@@ -505,9 +596,10 @@ const SportsManagement = () => {
                           {booking.status === 'pending' && (
                             <>
                               <button
-                                onClick={() => handleApproveBooking(booking.id)}
+                                onClick={() => handleApproveBooking(booking._id || booking.id)}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Approve"
+                                disabled={loading}
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>
@@ -515,6 +607,7 @@ const SportsManagement = () => {
                                 onClick={() => openRejectModal(booking)}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 title="Reject"
+                                disabled={loading}
                               >
                                 <XCircle className="w-4 h-4" />
                               </button>

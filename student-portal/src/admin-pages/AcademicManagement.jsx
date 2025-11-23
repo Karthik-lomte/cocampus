@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import adminService from '../api/adminService';
 import {
   Calendar,
   BookOpen,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 
 const AcademicManagement = () => {
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('semesters');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -41,21 +43,10 @@ const AcademicManagement = () => {
   const [isUploading, setIsUploading] = useState(false);
 
   // Semesters State
-  const [semesters, setSemesters] = useState([
-    { id: 1, academicYear: '2024-25', semester: 'Odd', startDate: '2024-07-15', endDate: '2024-12-15', status: 'active' },
-    { id: 2, academicYear: '2024-25', semester: 'Even', startDate: '2025-01-10', endDate: '2025-05-30', status: 'upcoming' },
-    { id: 3, academicYear: '2023-24', semester: 'Even', startDate: '2024-01-10', endDate: '2024-05-30', status: 'completed' },
-    { id: 4, academicYear: '2023-24', semester: 'Odd', startDate: '2023-07-15', endDate: '2023-12-15', status: 'completed' }
-  ]);
+  const [semesters, setSemesters] = useState([]);
 
   // Calendar Events State
-  const [events, setEvents] = useState([
-    { id: 1, title: 'Mid-Semester Exams', date: '2024-09-15', endDate: '2024-09-25', type: 'exam', description: 'Mid-semester examinations for all departments' },
-    { id: 2, title: 'Diwali Vacation', date: '2024-10-28', endDate: '2024-11-05', type: 'holiday', description: 'Diwali festival holidays' },
-    { id: 3, title: 'Sports Day', date: '2024-11-15', endDate: '2024-11-15', type: 'academic', description: 'Annual sports day event' },
-    { id: 4, title: 'End Semester Exams', date: '2024-12-01', endDate: '2024-12-15', type: 'exam', description: 'End semester examinations' },
-    { id: 5, title: 'Winter Vacation', date: '2024-12-20', endDate: '2025-01-05', type: 'holiday', description: 'Winter break' }
-  ]);
+  const [events, setEvents] = useState([]);
 
   // External Marks State
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -94,6 +85,32 @@ const AcademicManagement = () => {
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  useEffect(() => {
+    fetchAcademicData();
+  }, []);
+
+  const fetchAcademicData = async () => {
+    try {
+      setLoading(true);
+      const [semestersRes, eventsRes] = await Promise.all([
+        adminService.getSemesters(),
+        adminService.getAcademicEvents()
+      ]);
+
+      if (semestersRes.success && semestersRes.data) {
+        setSemesters(semestersRes.data);
+      }
+
+      if (eventsRes.success && eventsRes.data) {
+        setEvents(eventsRes.data);
+      }
+    } catch (error) {
+      console.error('Error fetching academic data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Google Calendar Sync Function
   const handleGoogleCalendarSync = async () => {
@@ -153,19 +170,32 @@ const AcademicManagement = () => {
   };
 
   // Semester Functions
-  const handleAddSemester = (e) => {
+  const handleAddSemester = async (e) => {
     e.preventDefault();
-    if (editingSemester) {
-      setSemesters(semesters.map(s => s.id === editingSemester.id ? { ...s, ...semesterForm } : s));
-      alert('Semester updated successfully!');
-    } else {
-      const newSemester = { id: semesters.length + 1, ...semesterForm };
-      setSemesters([...semesters, newSemester]);
-      alert('Semester added successfully!');
+    try {
+      setLoading(true);
+      if (editingSemester) {
+        const response = await adminService.updateSemester(editingSemester._id || editingSemester.id, semesterForm);
+        if (response.success) {
+          alert('Semester updated successfully!');
+          await fetchAcademicData();
+        }
+      } else {
+        const response = await adminService.createSemester(semesterForm);
+        if (response.success) {
+          alert('Semester added successfully!');
+          await fetchAcademicData();
+        }
+      }
+      setShowSemesterModal(false);
+      setEditingSemester(null);
+      setSemesterForm({ academicYear: '', semester: '', startDate: '', endDate: '', status: 'upcoming' });
+    } catch (error) {
+      console.error('Error saving semester:', error);
+      alert('Error saving semester. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setShowSemesterModal(false);
-    setEditingSemester(null);
-    setSemesterForm({ academicYear: '', semester: '', startDate: '', endDate: '', status: 'upcoming' });
   };
 
   const openEditSemester = (semester) => {
@@ -174,26 +204,51 @@ const AcademicManagement = () => {
     setShowSemesterModal(true);
   };
 
-  const deleteSemester = (id) => {
+  const deleteSemester = async (id) => {
     if (window.confirm('Are you sure you want to delete this semester?')) {
-      setSemesters(semesters.filter(s => s.id !== id));
+      try {
+        setLoading(true);
+        const response = await adminService.deleteSemester(id);
+        if (response.success) {
+          alert('Semester deleted successfully!');
+          await fetchAcademicData();
+        }
+      } catch (error) {
+        console.error('Error deleting semester:', error);
+        alert('Error deleting semester. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   // Event Functions
-  const handleAddEvent = (e) => {
+  const handleAddEvent = async (e) => {
     e.preventDefault();
-    if (editingEvent) {
-      setEvents(events.map(ev => ev.id === editingEvent.id ? { ...ev, ...eventForm } : ev));
-      alert('Event updated successfully!');
-    } else {
-      const newEvent = { id: events.length + 1, ...eventForm };
-      setEvents([...events, newEvent]);
-      alert('Event added successfully!');
+    try {
+      setLoading(true);
+      if (editingEvent) {
+        const response = await adminService.updateAcademicEvent(editingEvent._id || editingEvent.id, eventForm);
+        if (response.success) {
+          alert('Event updated successfully!');
+          await fetchAcademicData();
+        }
+      } else {
+        const response = await adminService.createAcademicEvent(eventForm);
+        if (response.success) {
+          alert('Event added successfully!');
+          await fetchAcademicData();
+        }
+      }
+      setShowEventModal(false);
+      setEditingEvent(null);
+      setEventForm({ title: '', date: '', endDate: '', type: 'academic', description: '' });
+    } catch (error) {
+      console.error('Error saving event:', error);
+      alert('Error saving event. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setShowEventModal(false);
-    setEditingEvent(null);
-    setEventForm({ title: '', date: '', endDate: '', type: 'academic', description: '' });
   };
 
   const openEditEvent = (event) => {
@@ -202,9 +257,21 @@ const AcademicManagement = () => {
     setShowEventModal(true);
   };
 
-  const deleteEvent = (id) => {
+  const deleteEvent = async (id) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      setEvents(events.filter(ev => ev.id !== id));
+      try {
+        setLoading(true);
+        const response = await adminService.deleteAcademicEvent(id);
+        if (response.success) {
+          alert('Event deleted successfully!');
+          await fetchAcademicData();
+        }
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Error deleting event. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -412,6 +479,17 @@ CSE2022005,Vikram Singh,28,`;
     );
   };
 
+  if (loading && semesters.length === 0 && events.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading academic data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -544,7 +622,7 @@ CSE2022005,Vikram Singh,28,`;
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {semesters.map((semester) => (
-                    <tr key={semester.id} className="hover:bg-gray-50">
+                    <tr key={semester._id || semester.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{semester.academicYear}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{semester.semester}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{new Date(semester.startDate).toLocaleDateString()}</td>
@@ -559,12 +637,14 @@ CSE2022005,Vikram Singh,28,`;
                           <button
                             onClick={() => openEditSemester(semester)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => deleteSemester(semester.id)}
+                            onClick={() => deleteSemester(semester._id || semester.id)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={loading}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -572,6 +652,15 @@ CSE2022005,Vikram Singh,28,`;
                       </td>
                     </tr>
                   ))}
+                  {semesters.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-12 text-center">
+                        <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500">No semesters found</p>
+                        <p className="text-gray-400 text-sm mt-1">Click "Add Semester" to create one</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -724,7 +813,7 @@ CSE2022005,Vikram Singh,28,`;
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredEvents.map((event) => (
-                      <tr key={event.id} className="hover:bg-gray-50">
+                      <tr key={event._id || event.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{event.title}</td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium bg-${getEventTypeColor(event.type)}-100 text-${getEventTypeColor(event.type)}-700 capitalize`}>
@@ -739,12 +828,14 @@ CSE2022005,Vikram Singh,28,`;
                             <button
                               onClick={() => openEditEvent(event)}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              disabled={loading}
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => deleteEvent(event.id)}
+                              onClick={() => deleteEvent(event._id || event.id)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              disabled={loading}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -752,6 +843,15 @@ CSE2022005,Vikram Singh,28,`;
                         </td>
                       </tr>
                     ))}
+                    {filteredEvents.length === 0 && !loading && (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-12 text-center">
+                          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-gray-500">No events found</p>
+                          <p className="text-gray-400 text-sm mt-1">Click "Add Event" to create one</p>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
